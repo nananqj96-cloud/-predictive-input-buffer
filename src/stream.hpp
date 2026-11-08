@@ -42,6 +42,7 @@ namespace streamui {
     void onComplete();
     void onRestart();
     void onProgress(float pct);                         // per frame, cheap
+    void setLevelName(std::string name);                // so chat and donations can mention it
 
     // ---- readouts for the menu ----
     bool chatOn();

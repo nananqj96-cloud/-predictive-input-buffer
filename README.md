@@ -2,6 +2,44 @@
 
 Formerly "Click Before Frames" (CBF). Same mod, new name: the in-game watermark is gone by default, and autoplay / updates no longer need the Discord link.
 
+## Stream overlay: chat, viewers, donations, heart rate (v3.3)
+A new **Stream** tab turns the game into a stream layout. Everything reads the real percentage from the level, so the chat gets louder, the donation alerts land harder and the heart rate climbs as the run goes deeper. Every piece has its own switch and each one can be on without the others.
+
+**Nothing on the overlay is labelled.** There is no "fake" or "simulated" anywhere on screen: it shows `12,450` next to a red dot, a normal donation card, a normal BPM monitor. The words appear only in the settings page, where you'd expect them.
+
+### What's on screen
+- **Chat** (`300 x 240` by default, resizable): timestamps, a coloured username, a moderation icon on some names (mod / VIP / sub / founder), and the message. Lines wrap and the oldest scroll away. 5,200+ distinct lines across ten categories: normal talk, reactions, spam, emotes, predictions, hype, panic, celebrations, death reactions and personal-best reactions.
+- **Viewer counter**: `4,281` with a live dot. Minimum, maximum, an exact value, or a random count that drifts.
+- **Donations**: a card on the middle right with the donor's name, the amount (`$5` to `$1,000`, small tips common, big ones rare) and their message. 1,350+ messages, including ones that read the current percentage or attempt number.
+- **Heart rate**: an ECG trace and a BPM pill on the right. It climbs with the run and, importantly, it doesn't count up by one: it jumps 3-7 BPM at irregular intervals (with the odd bigger correction when the gap is large), and eases back down after a restart instead of snapping to a resting rate.
+
+### How the chat reacts
+| Progress | What chat does |
+| --- | --- |
+| 0-10% | normal conversation between viewers |
+| 10-30% | occasional encouragement, more predictions |
+| 30-50% | reactions take over from small talk |
+| 50-70% | hype, more messages per second |
+| 70-85% | spam and caps, bursts of messages |
+| 85-95% | panic, "PLEASE", "DON'T CHOKE" |
+| 95-100% | maximum excitement |
+| 100% | a wall of celebration that keeps going |
+
+Deaths produce a reaction that scales with the percentage (a shrug at 10%, the whole chat screaming at 97%), new personal bests get their own category, and a completion floods the chat for a few seconds and usually pulls in a donation.
+
+### Settings
+- **Setup**: chat / viewers / donations / heart rate / timestamps on or off, the corner (four presets plus a free position), a layout preview, chat size, box size, opacity, and messages per second (Very slow to Max, or a custom rate).
+- **Chat**: how many unique participants (10, 25, 50, 100, 250, 500 or any number up to 5,000) and the viewer counter's range. Participants and message rate are separate: the first decides how many different people type, the second decides how often chat moves.
+- **Alerts**: donations, read-aloud, voice, volume, speed, delay, whether the message is read too, and the speech queue (one at a time, never overlapping, clearable).
+- **Custom bots**: name, name colour (30 colours), icon, how often that bot talks relative to everyone else, and its own messages. Edit and delete them; they're saved to `stream-bots.txt` in the mod's save folder.
+- **Custom donation messages**: your own lines, also saved (`stream-donations.txt`). `$P` becomes the percentage, `$A` the attempt number, `$L` the level's name.
+
+### Positioning
+In **Custom** the panel can be dragged anywhere, and the grip in its corner resizes it. A tap on the panel (without dragging) opens the menu, and there's a small **menu** chip on screen too, so it's reachable on a phone with no keyboard.
+
+### Speech note
+Read-aloud uses the system voice on macOS and iOS (`say`), on a worker thread, so a donation announcement never stutters the game. The Windows and Android builds report it as unavailable rather than linking a speech engine that could fail to load; everything else works the same there.
+
 ## Black Hole UI (experimental, off by default)
 One switch (Settings → **Black Hole UI**, or the Geode setting of the same name) turns the whole window into deep space: a black hole with a photon ring, a lensed accretion disk that slowly streams round, a faint polar jet, the star field orbiting it, and sparks that spiral in. The window edge gets a violet halo, the panels turn to smoked glass, and the accent colour becomes the disk's gold. Everything else works exactly the same. Light mode, accent and background pickers are ignored while it's on (the hole has its own look).
 
@@ -127,4 +165,4 @@ Practice use only; do not use for verified or leaderboard runs.
 - v3.1.0: the global brain's run comes first (over any macro you have; then your Macros folder, then Hyperbolus), the log says why there's no run for you (another TPS or another version of the level), and a Forget Macro button in the autoplay panel.
 - v3.2 (FrameWave): the mod is now called FrameWave (was Click Before Frames); the in-game watermark is a setting and off by default ("FrameWave | stage" in the bottom left when turned on, still hidden in practice mode); autoplay and updates no longer need the game linked to Discord (the link is only for the site's stats page).
 - v3.2.1: Black Hole UI (experimental, off by default): a whole-window theme with an accretion disk, photon ring, polar jet, orbiting stars and infalling sparks, smoked-glass panels and a violet halo.
-- v3.3.0: the Stream overlay: chat with 5,200+ generated lines and custom bots, a viewer counter, donation alerts with 1,350+ messages (optional read-aloud on macOS/iOS), a heart-rate monitor that reacts to your run, and drag / resize positioning. Every piece is switched on its own and shows no feature labels on screen.
+- v3.3.0: the Stream overlay. A Stream tab with its own sub-pages: chat (5,200+ generated lines, ten categories, 30 name colours, mod/VIP/sub/founder icons, custom bots you can edit), a viewer counter with a min/max/exact/random mode, donation alerts with 1,350+ messages and optional read-aloud on macOS/iOS, and a heart-rate monitor whose BPM jumps 3-7 at a time in response to your run. Chat reacts to progress, deaths, personal bests and completions. Drag to place it, drag the grip to resize, and every part has its own switch. No feature labels are shown on the overlay.

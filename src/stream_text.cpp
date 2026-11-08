@@ -927,6 +927,30 @@ namespace streamui::text {
             cross(b[G_PREDICT], PRED_HEADS, PRED_TAILS);
         }
 
+        // ---- lines about the level that's being played ($L) ----
+        // These only make sense once the level's name is known, so they're kept in their own bucket
+        // and the overlay only picks them when gLevelName isn't empty. `$L` is replaced there.
+        void buildLevelChat(Lines& v) {
+            putAll(v, {
+                "$L is such a good level", "$L again, chat we've been here all day",
+                "this part of $L always gets him", "the ending of $L is criminal",
+                "i've played $L, it's actually harder than it looks",
+                "$L is the best level he's played on stream",
+                "how many times can one person play $L",
+                "if he beats $L today i'm buying the merch",
+                "$L should be in the next gd awards", "the song in $L is stuck in my head",
+                "$L deco is unreal", "$L is a masterpiece and i will not elaborate",
+                "he's been on $L for so long", "$L is his white whale at this point",
+            });
+            cross(v, { "the ", "this part of ", "that bit in " },
+                { "$L is so unfair", "$L is actually beautiful", "$L deserves a top 10 spot" });
+            cross(v, { "i want to play ", "i could never play ", "i am NOT playing " },
+                { "$L", "$L without practice mode", "$L on mobile", "$L after watching this" });
+            cross(v, { "$L's ", "the " },
+                { "wave part is the hardest", "ending is the best part",
+                    "first drop is so good", "last jump is criminal" });
+        }
+
         // lines that read the actual run: $P = percentage, $A = attempts
         void buildGiftTemplates(Lines& v) {
             putAll(v, {
@@ -1004,6 +1028,7 @@ namespace streamui::text {
             buildDeath(b[C_DEATH]);
             buildPB(b[C_PB]);
             buildClauseChat(b);
+            buildLevelChat(b[C_LEVEL]);
 
             // de-duplicate first, then give each line a couple of tail variants: expanding before
             // de-duplicating would spend most of the expansion on strings that already exist

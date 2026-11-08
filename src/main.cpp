@@ -12513,6 +12513,7 @@ class $modify(BufPlayLayer, PlayLayer) {
         readSettings();
         applyStage();
         streamui::resetOverlay();  // v3.3: a new level starts with an empty chat
+        streamui::setLevelName(level ? std::string(level->m_levelName) : std::string());
         exportLines.clear();
         logClock = 0;
         loadMemory(level);

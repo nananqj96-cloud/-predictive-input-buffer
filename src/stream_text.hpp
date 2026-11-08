@@ -25,6 +25,7 @@ namespace streamui::text {
         C_CELEBRATE,    // the level is done
         C_DEATH,        // just died
         C_PB,           // new personal best
+        C_LEVEL,        // mentions the level by name ($L)
         C_COUNT
     };
 

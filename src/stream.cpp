@@ -621,6 +621,11 @@ namespace streamui {
 
         Overlay O;
 
+        // the level being played: chat and donations mention it when they can
+        std::string gLevelName;
+
+        std::string fillRun(std::string s);
+
         // ---- live gameplay state
         float gPct = 0.f;
         float gBest = 0.f;
@@ -656,7 +661,6 @@ namespace streamui {
 
         void ttsEnqueue(std::string const& user, int amount, std::string const& message, float delay);
         void buildOverlay();
-        void dropOverlay();
         void layoutOverlay();
         void addLine(LineView line);
         void relayoutRows();
@@ -703,6 +707,10 @@ namespace streamui {
                 W(text::C_NORMAL, 48.f); W(text::C_REACT, 18.f); W(text::C_PREDICT, 14.f);
                 W(text::C_EMOTE, 14.f); W(text::C_HYPE, 6.f);
             }
+            // talking about the level itself happens most in the calm stretches
+            if (!gLevelName.empty()) {
+                W(text::C_LEVEL, pct < 50.f ? 10.f : 4.f);
+            }
             return o;
         }
 
@@ -741,6 +749,21 @@ namespace streamui {
                 gBagCat = cat;
             }
             return gBag[gBagPos++];
+        }
+
+        // $P = percentage, $A = attempt, $L = the level's name (nothing if it isn't known)
+        std::string fillRun(std::string s) {
+            auto sub = [&s](char const* from, std::string const& to) {
+                size_t p = 0;
+                while ((p = s.find(from, p)) != std::string::npos) {
+                    s.replace(p, std::strlen(from), to);
+                    p += to.size();
+                }
+            };
+            sub("$P", std::to_string(std::clamp(static_cast<int>(std::lround(gPct)), 1, 99)));
+            sub("$A", std::to_string(std::max(1, gAttempts)));
+            sub("$L", gLevelName);
+            return s;
         }
 
         std::string clockStamp() {
@@ -1249,7 +1272,7 @@ namespace streamui {
                 int cat = category < 0 ? pickCategory(s, gPct) : category;
                 text = text::chat().at(nextLine(s, cat));
             }
-            v.body = styleOf(text, *b, s);
+            v.body = styleOf(fillRun(text), *b, s);
             addLine(std::move(v));
         }
 
@@ -1413,21 +1436,6 @@ namespace streamui {
         // donations
         // =====================================================================
 
-        std::string fillTemplate(std::string s, int amount, std::string const& user) {
-            auto replace = [&s](std::string const& from, std::string const& to) {
-                size_t p = 0;
-                while ((p = s.find(from, p)) != std::string::npos) {
-                    s.replace(p, from.size(), to);
-                    p += to.size();
-                }
-            };
-            replace("$P", std::to_string(std::clamp(static_cast<int>(std::lround(gPct)), 1, 99)));
-            replace("$A", std::to_string(std::max(1, gAttempts)));
-            replace("$U", user);
-            replace("$N", std::to_string(amount));
-            return s;
-        }
-
         int randomAmount(uint32_t& s) {
             // 5..1000 with a long tail: most donations are small, $1000 is a moment
             float u = rndf(s);
@@ -1439,11 +1447,11 @@ namespace streamui {
         std::string pickGiftMessage(uint32_t& s, int amount) {
             // the user's own lines are used too, and get the same $P / $A / $N treatment
             if (!gCustomGifts.empty() && rndf(s) < 0.25f) {
-                return fillTemplate(gCustomGifts[rnd32(s) % gCustomGifts.size()], amount, "");
+                return gCustomGifts[rnd32(s) % gCustomGifts.size()];
             }
             auto const& t = text::gifts();
             if (!text::giftTemplates().empty() && rndf(s) < 0.35f) {
-                return fillTemplate(text::giftTemplates()[rnd32(s) % text::giftTemplates().size()], amount, "");
+                return text::giftTemplates()[rnd32(s) % text::giftTemplates().size()];
             }
             return t.at(static_cast<int>(rnd32(s) % static_cast<uint32_t>(t.size)));
         }
@@ -1457,7 +1465,7 @@ namespace streamui {
             g.color = b ? paletteColor(b->color) : ccColor3B { 255, 255, 255 };
             g.badge = b ? b->badge : 0;
             g.amount = randomAmount(s);
-            g.message = pickGiftMessage(s, g.amount);
+            g.message = fillRun(pickGiftMessage(s, g.amount));
             g.t = 0.f;
             g.queued = false;
             O.activeGift = g;
@@ -1949,6 +1957,13 @@ namespace streamui {
         // a completed level holds its celebration for a while
         if (gComplete) {
             gCompleteT += dt;
+        }
+    }
+
+    void setLevelName(std::string name) {
+        gLevelName = std::move(name);
+        if (gLevelName.size() > 40) {
+            gLevelName.resize(40);
         }
     }
 
