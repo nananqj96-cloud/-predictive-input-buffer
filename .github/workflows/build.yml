@@ -80,4 +80,4 @@ jobs:
           fi
           cp "$FILE" basu.input-buffer.geode
           NOTES=$(tail -n 1 README.md)
-          gh release create "$VERSION" basu.input-buffer.geode --title "Click Before Frames $VERSION" --notes "$NOTES"
+          gh release create "$VERSION" basu.input-buffer.geode --title "FrameWave $VERSION" --notes "$NOTES"
