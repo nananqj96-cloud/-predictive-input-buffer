@@ -3,6 +3,8 @@
 
 #include <Geode/Geode.hpp>
 
+using namespace geode::prelude;
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
