@@ -30,7 +30,8 @@ namespace streamui {
     void load();                                        // first call: builds the bot list
     void tick(cocos2d::CCNode* layer, float dt);        // once per frame, from PlayLayer
     void refresh();                                     // settings changed in the menu
-    void resetOverlay();                                // drop the overlay (level left)
+    void resetOverlay();
+    void leaveLevel();     // the level node is going away: drop the overlay tree
     void clearChat();
     void previewMessage();                              // "send a test message"
     void testDonation();

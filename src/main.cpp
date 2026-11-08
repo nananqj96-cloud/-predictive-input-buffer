@@ -12680,6 +12680,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     // forgotten (never touched). The ghosts are let go of the same way (like Android): they
     // still point at the old level, so deleting them isn't safe.
     static void forgetLeftLevel() {
+        streamui::leaveLevel();  // v3.3: let the overlay tree go before the level node dies
         benchFinish();
         benchRecording = false;
         saveMemory();
@@ -12695,6 +12696,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void onQuit() {
+        streamui::leaveLevel();  // v3.3: release the overlay tree while the level node is still alive
         benchFinish();
         benchFlush();
         benchRecording = false;
@@ -13564,6 +13566,8 @@ class $modify(BufBaseGameLayer, GJBaseGameLayer) {
         if (!buf.simulating) {
             if (auto* pl = typeinfo_cast<PlayLayer*>(this)) {
                 streamui::onProgress(static_cast<float>(pl->getCurrentPercent()));
+                // parented to the PlayLayer itself (like the watermark and the console), which is the
+                // layer that is in raw screen pixels: same as every other overlay in this mod
                 streamui::tick(pl, dt);
             }
         }

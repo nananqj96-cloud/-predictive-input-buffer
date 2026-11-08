@@ -532,6 +532,11 @@ namespace streamui {
             ccColor3B color{ 255, 255, 255 };
             int badge = 0;
             std::string stamp;
+            // wrapped once, when the line arrives (and again only if the panel is resized): a busy
+            // chat must not re-measure its whole history for every new message
+            std::vector<std::string> wrapped;
+            float height = 0.f;
+            float headWidth = 0.f;   // where the body starts on the first line
         };
 
         struct Row {
@@ -576,6 +581,11 @@ namespace streamui {
 
             CCNode* grip = nullptr;        // bottom-right corner: drag to resize
             CCDrawNode* gripDraw = nullptr;
+            // the size / scale / corner / chat-visible the tree was last placed with
+            struct LayoutSig {
+                float w = -1.f, h = -1.f, scale = -1.f, pos = -1.f, chat = -1.f;
+            } laidOutFor;
+
             CCNode* chip = nullptr;        // small settings chip, shown while the menu is closed
             CCDrawNode* chipDraw = nullptr;
             std::function<void()> onChip = nullptr;
@@ -638,6 +648,7 @@ namespace streamui {
         // ---- dragging
         bool gDragging = false;
         bool gResizing = false;
+        bool gMoved = false;
         CCPoint gGrabOffset{};
         CCPoint gResizeOrigin{};
         float gResizeW = 0.f;
@@ -645,9 +656,11 @@ namespace streamui {
 
         void ttsEnqueue(std::string const& user, int amount, std::string const& message, float delay);
         void buildOverlay();
+        void dropOverlay();
         void layoutOverlay();
         void addLine(LineView line);
         void relayoutRows();
+        void rewrapAll();
         void pushEvent(int cat, int count, float spread = 0.55f);
 
         // ---- hype weights: how the audience behaves at a given percentage
@@ -929,6 +942,9 @@ namespace streamui {
             if (O.lineH < 6.f) {
                 O.lineH = 12.f;
             }
+            // place everything now: the first frame of a level should already look right
+            layoutOverlay();
+            O.laidOutFor = { S.width, S.height, S.scale, static_cast<float>(S.pos), S.chat ? 1.f : 0.f };
         }
 
         // =====================================================================
@@ -1015,8 +1031,8 @@ namespace streamui {
             if (O.heart) {
                 O.heart->setVisible(S.heart);
                 if (S.heart) {
-                    float h = 34.f * S.scale;
-                    float w = 126.f * S.scale;
+                    float h = 32.f * S.scale;
+                    float w = 132.f * S.scale;
                     float x = win.width - w - 14.f;
                     float y = win.height * 0.58f;
                     // at the top-right of a level the progress bar lives; keep clear of it
@@ -1041,12 +1057,18 @@ namespace streamui {
                 O.grip->setPosition({ r.getMaxX() - 17.f, r.getMinY() + 2.f });
             }
             if (O.chip) {
-                // under the viewers pill when the chat is at the bottom of the screen, else above it
-                bool bottom = S.pos == 2 || S.pos == 3;
-                auto pos = bottom ? CCPoint { 12.f, 12.f } : CCPoint { 12.f, win.height - 28.f };
-                O.chip->setPosition(pos);
+                // directly under the chat panel when there is room, otherwise above it, so it never
+                // sits underneath the panel (z 40 is above the chat's z 10)
+                float cw = 44.f;
+                float chh = 16.f;
+                float below = r.getMinY() - chh - 4.f;
+                float above = r.getMaxY() + 4.f;
+                float x = std::clamp(r.origin.x, 8.f, std::max(8.f, win.width - cw - 8.f));
+                float y = below >= 6.f ? below : (above + chh <= win.height - 6.f ? above : r.getMinY() + 4.f);
+                O.chip->setPosition({ x, y });
             }
 
+            rewrapAll();
             relayoutRows();
         }
 
@@ -1078,17 +1100,10 @@ namespace streamui {
             r.user->setPosition({ x, y });
             x += textW(v.user + ":", scale, "chatFont.fnt") + 3.5f;
 
-            // body: wrap if there is room for a second line, else clip to the row
-            float avail = std::max(40.f, width - x - 6.f);
-            float linesH = 0.f;
-            auto wrapped = wrapText(v.body, scale, "chatFont.fnt", avail, &linesH);
-            if (wrapped.size() > 3) {
-                wrapped.resize(3);
-            }
             for (int i = 0; i < 3; ++i) {
                 auto* l = r.body[i];
-                if (i < static_cast<int>(wrapped.size()) && i == 0) {
-                    l->setString((v.body).c_str());
+                if (i == 0) {
+                    l->setString(v.wrapped.empty() ? v.body.c_str() : v.wrapped[0].c_str());
                     l->setScale(scale);
                     l->setColor({ 226, 226, 236 });
                     l->setPosition({ x, y });
@@ -1122,21 +1137,10 @@ namespace streamui {
             float y = bottom;
             for (size_t k = O.lines.size(); k > 0 && ri < O.rows.size(); --k) {
                 auto const& v = O.lines[k - 1];
-                // wrapped height for this line
-                float x = 6.f;
-                if (S.showTime) {
-                    x += textW(v.stamp, 0.52f, "chatFont.fnt") + 4.f;
+                if (v.wrapped.empty()) {
+                    continue;
                 }
-                if (v.badge > 0) {
-                    x += 9.f;
-                }
-                x += textW(v.user + ":", scale, "chatFont.fnt") + 3.5f;
-                float avail = std::max(40.f, width - x - 6.f);
-                float linesH = 0.f;
-                auto wrapped = wrapText(v.body, scale, "chatFont.fnt", avail, &linesH);
-                int rowsNeeded = static_cast<int>(std::min<size_t>(wrapped.size(), 3));
-                float h = O.lineH * static_cast<float>(std::max(rowsNeeded, 1)) + 1.f;
-                if (y + h > usable + 1.f) {
+                if (y + v.height > usable + 1.f) {
                     break;
                 }
                 auto& r = O.rows[ri++];
@@ -1145,30 +1149,56 @@ namespace streamui {
                 // the body under the first line, if it wrapped
                 float lh = O.lineH;
                 for (int i = 1; i < 3; ++i) {
-                    if (i < static_cast<int>(wrapped.size())) {
-                        r.body[i]->setString(wrapped[static_cast<size_t>(i)].c_str());
+                    if (i < static_cast<int>(v.wrapped.size())) {
+                        r.body[i]->setString(v.wrapped[static_cast<size_t>(i)].c_str());
                         r.body[i]->setScale(scale);
                         r.body[i]->setColor({ 226, 226, 236 });
-                        float bx = 6.f;
-                        if (S.showTime) {
-                            bx += textW(v.stamp, 0.52f, "chatFont.fnt") + 4.f;
-                        }
-                        if (v.badge > 0) {
-                            bx += 9.f;
-                        }
-                        bx += textW(v.user + ":", scale, "chatFont.fnt") + 3.5f;
-                        r.body[i]->setPosition({ bx, lh * 0.5f + static_cast<float>(i) * lh });
+                        r.body[i]->setPosition({ v.headWidth, lh * 0.5f + static_cast<float>(i) * lh });
                         r.body[i]->setVisible(true);
                     }
                     else {
                         r.body[i]->setVisible(false);
                     }
                 }
-                y += h;
+                y += v.height;
+            }
+        }
+
+        // wraps one line for the current panel width and caches the result on it
+        void wrapLine(LineView& v, float panelWidth) {
+            float scale = 0.62f;
+            float x = 6.f;
+            if (S.showTime) {
+                x += textW(v.stamp, 0.52f, "chatFont.fnt") + 4.f;
+            }
+            if (v.badge > 0) {
+                x += 9.f;
+            }
+            x += textW(v.user + ":", scale, "chatFont.fnt") + 3.5f;
+            v.headWidth = x;
+            float avail = std::max(40.f, panelWidth - x - 6.f);
+            float linesH = 0.f;
+            v.wrapped = wrapText(v.body, scale, "chatFont.fnt", avail, &linesH);
+            if (v.wrapped.size() > 3) {
+                v.wrapped.resize(3);
+            }
+            v.height = O.lineH * static_cast<float>(std::max<size_t>(v.wrapped.size(), 1)) + 1.f;
+        }
+
+        void rewrapAll() {
+            if (!O.chat) {
+                return;
+            }
+            float width = O.chat->getContentSize().width;
+            for (auto& v : O.lines) {
+                wrapLine(v, width);
             }
         }
 
         void addLine(LineView line) {
+            if (O.chat) {
+                wrapLine(line, O.chat->getContentSize().width);
+            }
             O.lines.push_back(std::move(line));
             // keep at most what the panel can possibly show
             size_t cap = O.rows.size();
@@ -1299,9 +1329,9 @@ namespace streamui {
             // ---- draw the pill
             auto* pill = O.heartPill;
             pill->clear();
-            float w = 126.f * S.scale;
-            float h = 34.f * S.scale;
-            float pillW = 88.f * S.scale;
+            float w = 132.f * S.scale;
+            float h = 32.f * S.scale;
+            float pillW = 92.f * S.scale;
             float px = w - pillW;
             roundRect(pill, { px, 0.f, pillW, h }, h / 2.f, { 0.03f, 0.01f, 0.03f, 0.92f }, std::max(1.f, 1.4f * S.scale),
                 { 1.f, 1.f, 1.f, 0.95f });
@@ -1319,7 +1349,7 @@ namespace streamui {
                 O.lastBpm = digits;
                 O.bpmLabel->setString(digits.c_str());
             }
-            O.bpmLabel->setPosition({ px + 34.f * S.scale, h * 0.5f + 1.f });
+            O.bpmLabel->setPosition({ px + 44.f * S.scale, h * 0.5f + 1.f });
 
             // ---- the ECG trace to the left of the pill
             auto* ecg = O.ecg;
@@ -1857,6 +1887,12 @@ namespace streamui {
             dt = 1.f / 60.f;
         }
         gClock += dt;
+        // the menu can change size, scale or corner at any time: re-place the tree when it did
+        if (O.built && (S.width != O.laidOutFor.w || S.height != O.laidOutFor.h || S.scale != O.laidOutFor.scale ||
+                           static_cast<float>(S.pos) != O.laidOutFor.pos || (S.chat ? 1.f : 0.f) != O.laidOutFor.chat)) {
+            layoutOverlay();
+            O.laidOutFor = { S.width, S.height, S.scale, static_cast<float>(S.pos), S.chat ? 1.f : 0.f };
+        }
         ensureWorker();
         uint32_t& s = gSeed;
         rnd32(s);
@@ -2088,6 +2124,48 @@ namespace streamui {
         dirty = false;
     }
 
+    // The overlay's node is retained by the overlay (addChild alone wouldn't keep it alive once the
+    // PlayLayer it was added to is gone). Coming back to the menu means the level node is about to
+    // die, so the overlay is detached first and the whole tree is rebuilt on the next level. This
+    // is what keeps O.root from ever being a dangling pointer.
+    void dropOverlay() {
+        if (O.root) {
+            if (O.root->getParent()) {
+                O.root->removeFromParentAndCleanup(false);
+            }
+            O.root->release();
+            O.root = nullptr;
+        }
+        O.built = false;
+        O.chat = nullptr;
+        O.chatBg = nullptr;
+        O.headLabel = nullptr;
+        O.viewers = nullptr;
+        O.viewersBg = nullptr;
+        O.viewersLabel = nullptr;
+        O.viewersIcon = nullptr;
+        O.heart = nullptr;
+        O.heartPill = nullptr;
+        O.heartIcon = nullptr;
+        O.ecg = nullptr;
+        O.bpmLabel = nullptr;
+        O.ecgHead = nullptr;
+        O.gift = nullptr;
+        O.giftBg = nullptr;
+        O.giftBar = nullptr;
+        O.giftName = nullptr;
+        O.giftAmount = nullptr;
+        O.giftMsg[0] = O.giftMsg[1] = nullptr;
+        O.giftFoot = nullptr;
+        O.rows.clear();
+        O.lines.clear();
+        O.gifts.clear();
+        O.giftBusy = false;
+        O.chip = nullptr;
+        O.lastBpm.clear();
+        O.lastViewers.clear();
+    }
+
     void resetOverlay() {
         gPct = 0.f;
         gAttemptMax = 0.f;
@@ -2104,6 +2182,8 @@ namespace streamui {
                 O.gift->setVisible(false);
             }
         }
+        // start fresh: the previous level's node now owns a tree we shouldn't touch again
+        dropOverlay();
     }
 
     void clearChat() {
@@ -2185,6 +2265,7 @@ namespace streamui {
         // the panel itself
         if (S.chat && world.x >= r.origin.x && world.x <= r.getMaxX() && world.y >= r.origin.y && world.y <= r.getMaxY()) {
             gDragging = true;
+            gMoved = false;
             gGrabOffset = CCPoint { world.x - r.origin.x, world.y - r.origin.y };
             return true;
         }
@@ -2206,6 +2287,7 @@ namespace streamui {
             return;
         }
         if (gDragging) {
+            gMoved = true;
             float x = world.x - gGrabOffset.x;
             float y = world.y - gGrabOffset.y;
             // free positioning: the panel is centred where the user drops it
@@ -2221,8 +2303,14 @@ namespace streamui {
 
     void touchUp() {
         bool wasResize = gResizing;
+        bool tapped = gDragging && !gMoved;
         gDragging = false;
         gResizing = false;
+        gMoved = false;
+        // a tap on the panel (not a drag) opens the settings: it's the discoverable way in on a phone
+        if (tapped && O.onChip) {
+            O.onChip();
+        }
         if (wasResize) {
             dirty = true;  // the menu shows the size, so let it refresh
         }
@@ -2230,6 +2318,11 @@ namespace streamui {
 
     bool dragging() {
         return gDragging || gResizing;
+    }
+
+    // the level is gone: let go of the overlay's tree before the PlayLayer it lived in dies
+    void leaveLevel() {
+        dropOverlay();
     }
 
 }  // namespace streamui
