@@ -9776,8 +9776,8 @@ private:
                 float size = layer == 0 ? 0.5f + rnd() * 0.5f : 0.9f + rnd() * 0.9f;
                 auto* star = CCLayerColor::create({ 255, 255, 255, 255 }, size, size);
                 float ang = rnd() * 6.2831853f;
-                float far = 40.f + rnd() * spread;
-                star->setPosition({ far * std::cos(ang), far * std::sin(ang) * 0.8f });
+                float dist = 40.f + rnd() * spread;  // not "far": Windows.h has a legacy `far` macro
+                star->setPosition({ dist * std::cos(ang), dist * std::sin(ang) * 0.8f });
                 float r = rnd();
                 star->setColor(r < 0.18f ? ccColor3B { 196, 180, 255 } : r < 0.34f ? ccColor3B { 255, 216, 186 } : ccColor3B { 255, 255, 255 });
                 GLubyte hi = static_cast<GLubyte>((layer == 0 ? 90 : 150) + rnd() * 100);
