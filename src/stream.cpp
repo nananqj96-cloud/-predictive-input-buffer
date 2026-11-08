@@ -692,6 +692,14 @@ namespace streamui {
         float gDeathCooldown = 0.f;
         bool gWelcomed = false;
         std::deque<std::pair<int, float>> gEvents;   // category to flush, delay
+        // The GO wall: chat doesn't send one GO, it sends fifteen in a row. A wall is a count of
+        // lines still to send plus the gap between them, so it reads as a wall and not as a
+        // coincidentally dense second.
+        int gWallLeft = 0;
+        int gWallLines = 0;
+        float gWallGap = 0.f;
+        float gWallBase = 0.13f;    // the gap the wall was asked for: the slowest between-lines gap
+        float gWallCooldown = 0.f;  // so a run of personal bests can't wall every percent
 
         // ---- dragging
         bool gDragging = false;
@@ -711,10 +719,14 @@ namespace streamui {
         void relayoutRows();
         void rewrapAll();
         void pushEvent(int cat, int count, float spread = 0.55f);
+        void startWall(int lines, float gap);
+        void startWallSoft(int lines, float gap);
 
         // ---- hype weights: how the audience behaves at a given percentage
         struct Weights {
             float w[text::C_COUNT];
+            // The GO wall is not a weighted category: it is sent as a run of consecutive lines
+            // when a moment calls for it, so a random roll never has to land on it.
         };
 
         Weights weightsFor(float pct) {
@@ -820,7 +832,9 @@ namespace streamui {
                 // with nothing short in it) the whole category is used. The chat must never go
                 // blank, so there is no path here that can leave the bag empty.
                 float panelW = O.chat ? O.chat->getContentSize().width : 0.f;
-                bool narrow = panelW >= 160.f && panelW < 420.f;
+                // The GO wall is exempt: its whole character is the long stretched line, and a
+                // "GO" that has been filtered down to fit is not a wall.
+                bool narrow = panelW >= 160.f && panelW < 420.f && cat != text::C_GO;
                 int widthKey = static_cast<int>(panelW);
                 if (widthKey != gShortWidth) {
                     for (auto& c : gShortCache) {
@@ -1555,6 +1569,30 @@ namespace streamui {
             for (int i = 0; i < count; ++i) {
                 gEvents.emplace_back(cat, rndf(gSeed) * spread);
             }
+        }
+
+        // Starts a run of GO lines. The wall takes over the feed for its length: the ordinary
+        // chat clock is held back while it runs, which is exactly what a real GD chat does at a
+        // new best or at the last few percent.
+        void startWall(int lines, float gap) {
+            if (!S.chat || lines <= 0) {
+                return;
+            }
+            // never bury a wall that is already going: extend it instead
+            gWallLines = std::max(gWallLines, lines);
+            gWallLeft = std::max(gWallLeft, lines);
+            gWallBase = std::clamp(gap, 0.03f, 0.4f);
+            gWallGap = std::min(gWallGap > 0.f ? gWallGap : gWallBase, gWallBase);
+            gWallCooldown = 2.2f + static_cast<float>(lines) * 0.09f;
+        }
+
+        // a wall for a moment that may come round often (a new best every percent): allowed maybe
+        // once every few seconds, and never stacked on top of a wall that is still running
+        void startWallSoft(int lines, float gap) {
+            if (gWallLeft > 0 || gWallCooldown > 0.f) {
+                return;
+            }
+            startWall(lines, gap);
         }
 
         // messages/second at the current percentage: the user's setting is the rate for a calm
@@ -2305,8 +2343,33 @@ namespace streamui {
             layer->addChild(O.root, 1000);
         }
 
+        // ---- the GO wall takes over the feed while it runs
+        if (gWallCooldown > 0.f) {
+            gWallCooldown = std::max(0.f, gWallCooldown - dt);
+        }
+        if (S.chat && gWallLeft > 0) {
+            gWallGap -= dt;
+            while (gWallLeft > 0 && gWallGap <= 0.f) {
+                emitOne(text::C_GO, s);
+                --gWallLeft;
+                // the wall speeds up as it goes, the way a real one does
+                float t = gWallLines > 0 ? 1.f - static_cast<float>(gWallLeft) / gWallLines : 1.f;
+                float base = gWallBase > 0.f ? gWallBase : 0.13f;
+                // a wall builds: the first lines are deliberate, then they pile in. The whole
+                // thing lasts long enough to watch the panel fill up with GO, which is the point.
+                gWallGap += std::max(0.045f, base * (1.f - 0.45f * t)) * (0.7f + rndf(s) * 0.7f);
+            }
+            if (gWallLeft <= 0) {
+                // a breath after the wall, then whatever was queued for the moment lands
+                gChatTimer = std::max(gChatTimer, 0.30f);
+                gWallLines = 0;
+            }
+        }
+
         // ---- the chat clock
         if (S.chat) {
+            // Events only drain inside the chat clock above, so with the chat switched off every
+            // death and every completion piled its lines into the queue and nothing ever took them out.
             flushEvents(dt);
 
             // base rate from the setting, scaled by how exciting the run is
@@ -2319,6 +2382,10 @@ namespace streamui {
                     gBurstGap = 0.035f + rndf(s) * 0.09f;
                     emitOne(-1, s);
                 }
+            }
+            // while a wall runs, the ordinary feed is mostly held back: the wall *is* the chat
+            if (gWallLeft > 0) {
+                rate *= 0.18f;
             }
             gChatTimer -= dt * rate;
             if (gChatTimer <= 0.f) {
@@ -2368,13 +2435,38 @@ namespace streamui {
 
     void onProgress(float pct) {
         gPct = std::clamp(pct, 0.f, 100.f);
+        // A personal best is the moment a GD chat starts typing GO, so the overlay tracks the best
+        // percentage it has seen across this session (and remembers the level's real best through
+        // setBestPercent) and throws a wall every time it is beaten.
         if (gPct > gAttemptMax) {
             gAttemptMax = gPct;
         }
-        // a new personal best gets a one-off chat reaction (not every frame, not every attempt)
+        if (gPct > gBest + 0.05f) {
+            bool wasMeaningful = gBest > 0.f && gPct - gBest >= 1.f;
+            gBest = gPct;
+            if (wasMeaningful && S.chat && gPct < 99.5f) {
+                // a couple of stacked walls at the top end, a short one earlier on
+                int lines = gPct > 85.f ? 16 : gPct > 55.f ? 11 : 7;
+                startWallSoft(lines, gPct > 85.f ? 0.085f : 0.14f);
+                pushEvent(text::C_PB, 2, 1.1f);
+            }
+        }
         if (gPct >= 100.f) {
             return;
         }
+    }
+
+    // the level's own saved best, so the first wall comes at the right moment on a fresh session
+    void setBestPercent(float pct) {
+        gBest = std::clamp(pct, 0.f, 100.f);
+    }
+
+    // a GO wall on demand (the chip's "hype" tap, and the completion/death hooks)
+    void hypeWall() {
+        load();
+        // the menu button: a full wall, long enough to see, starting immediately
+        gWallCooldown = 0.f;
+        startWall(14, 0.10f);
     }
 
     void onDeath(float pct) {
@@ -2396,7 +2488,8 @@ namespace streamui {
         if (!S.chat) {
             return;
         }
-        // the big one: a wall of celebration that keeps going for a while
+        // the big one: a GO/GG wall, then celebration that keeps going for a while
+        startWall(20, 0.075f);
         pushEvent(text::C_CELEBRATE, 26, 3.5f);
         pushEvent(text::C_SPAM, 10, 3.0f);
         pushEvent(text::C_EMOTE, 8, 2.4f);
@@ -2595,6 +2688,12 @@ namespace streamui {
         gAttempts = 0;
         gEvents.clear();
         gBurst = 0.f;
+        gWallLeft = 0;
+        gWallLines = 0;
+        gWallGap = 0.f;
+        gWallCooldown = 0.f;
+        // gBest is not cleared here: setBestPercent() puts it back to the level's own record right
+        // after this, so a fresh attempt doesn't wall at every percent the player has already done
         if (O.built) {
             O.lines.clear();
             relayoutRows();

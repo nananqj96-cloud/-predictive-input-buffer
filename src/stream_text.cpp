@@ -374,6 +374,12 @@ namespace streamui::text {
                 put(v, "W" + std::string(static_cast<size_t>(n) + 1, 'W'));
                 put(v, std::string(static_cast<size_t>(n), 'A'));
             }
+            // THE GO WALL. In a GD chat this is the single most typed thing there is: at a new
+            // best, at the last 5%, at a completion, the feed stops being sentences and becomes
+            // GOOOOOO with the O stretched further every line. buildGo() is a category of its own
+            // so the overlay can call it for those moments instead of hoping a weighted roll
+            // lands on it (GO used to be ~1.6% of all lines, which never reads as spam).
+            //
             // copypasta style repeats
             put(v, "97 again 97 again 97 again");
             put(v, "he dies at 97 he dies at 97 he dies at 97");
@@ -384,6 +390,38 @@ namespace streamui::text {
             put(v, "no no no no no no no");
             put(v, "please please please please please");
             put(v, "one more one more one more one more");
+        }
+
+        // ---------------- the GO wall ----------------
+        // Every length from GO to the point where the line is all O, plus the phrases that get
+        // the same treatment. The overlay picks these as a run of several lines in a row, so the
+        // feed reads like a wall rather than one stray GO.
+        void buildGo(Lines& v) {
+            putAll(v, { "GO", "GO GO", "GO GO GO", "GO GO GO GO", "GO GO GO GO GO",
+                "GO GO GO GO GO GO GO", "GO GO GO GO GO GO GO GO GO" });
+            for (int n = 2; n <= 22; ++n) {
+                put(v, "G" + std::string(static_cast<size_t>(n), 'O'));
+            }
+            for (int n = 1; n <= 9; ++n) {
+                put(v, "LET'S G" + std::string(static_cast<size_t>(n) + 1, 'O'));
+                put(v, "LETS G" + std::string(static_cast<size_t>(n) + 1, 'O'));
+                put(v, "LET'S GO" + std::string(static_cast<size_t>(n), '!'));
+            }
+            putAll(v, { "GG", "GG WP", "GGs", "W", "WWWW", "WWWWW", "WWWWWWWW",
+                "CLIP IT", "CLIP THAT", "CLIPPED", "SAVE THE CLIP", "SOMEBODY CLIP IT",
+                "GG BRO", "GG CHAT", "EZ", "EZ CLAP", "EZZZZ", "NO WAY", "NO WAYYYY",
+                "HOLY", "HOLY SHIT", "HOLY!!!!", "LETSGOOOOO", "LETS FUCKING GO",
+                "WE DID IT", "IT'S DONE", "DONE", "FINALLY", "FINALLY BRO",
+                "HE DID IT", "HE ACTUALLY DID IT", "MASSIVE", "HUGE", "INSANE" });
+            for (int n = 2; n <= 8; ++n) {
+                put(v, "GG" + std::string(static_cast<size_t>(n), 'G'));
+                put(v, "EZ" + std::string(static_cast<size_t>(n), 'Z'));
+                put(v, "W" + std::string(static_cast<size_t>(n) + 1, 'W'));
+            }
+            putAll(v, { "GO GO GO GO GO GO GO GO GO GO GO", "GOOOOOOOOOOOOOOOOOOOO",
+                "LET'S GOOOOOOOOOOOOOOO", "CHAT WE'RE GOING", "WE'RE GOING", "WE GO",
+                "GO FOR IT", "SEND IT", "FULL SEND", "NOW NOW NOW", "DO IT NOW",
+                "DON'T STOP NOW", "KEEP IT GOING", "NEVER STOP" });
         }
 
         // ---------------- emotes ----------------
@@ -1049,6 +1087,7 @@ namespace streamui::text {
             buildPB(b[C_PB]);
             buildClauseChat(b);
             buildLevelChat(b[C_LEVEL]);
+            buildGo(b[C_GO]);
 
             // de-duplicate first, then give each line a couple of tail variants: expanding before
             // de-duplicating would spend most of the expansion on strings that already exist

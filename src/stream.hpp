@@ -36,6 +36,7 @@ namespace streamui {
     void previewMessage();                              // "send a test message"
     void testDonation();
     void heartSpike();
+    void hypeWall();                                    // "make chat GO" from the menu
 
     // ---- level events (called from the PlayLayer hooks) ----
     void onDeath(float pct);
@@ -43,6 +44,7 @@ namespace streamui {
     void onRestart();
     void onProgress(float pct);                         // per frame, cheap
     void setLevelName(std::string name);                // so chat and donations can mention it
+    void setBestPercent(float pct);                     // the level's saved best: first GO wall lands there
 
     // ---- readouts for the menu ----
     bool chatOn();

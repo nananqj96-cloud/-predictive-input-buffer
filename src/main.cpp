@@ -11034,6 +11034,10 @@ private:
         streamui::testDonation();
     }
 
+    void onStreamHype(CCObject*) {
+        streamui::hypeWall();
+    }
+
     void onStreamClearChat(CCObject*) {
         streamui::clearChat();
     }
@@ -11273,11 +11277,14 @@ private:
         readout("In chat", fmt::format("{}", streamui::activeBotCount()), m_text);
         readout("Donations", std::to_string(streamui::giftMessageCount()), m_muted);
         // buttons
-        float hb = (colW - 20.f) / 3.f;
-        float by = FOOT + 24.f;
-        button(m_pageMenu, "Send Line", menu_selector(BufferMenu::onStreamTestMessage), { rx + 8.f + hb / 2.f, by }, hb, true, 0, 16.f);
-        button(m_pageMenu, "Test Alert", menu_selector(BufferMenu::onStreamTestGift), { rx + 12.f + hb * 1.5f, by }, hb, false, 0, 16.f);
-        button(m_pageMenu, "Clear Chat", menu_selector(BufferMenu::onStreamClearChat), { rx + 16.f + hb * 2.5f, by }, hb, false, 0, 16.f);
+        // two rows of two: the labels stay readable at this width
+        float hb = (colW - 22.f) / 2.f;
+        float by = FOOT + 34.f;
+        button(m_pageMenu, "Send Line", menu_selector(BufferMenu::onStreamTestMessage), { rx + 10.f + hb / 2.f, by }, hb, true, 0, 16.f);
+        button(m_pageMenu, "Chat GO", menu_selector(BufferMenu::onStreamHype), { rx + 14.f + hb * 1.5f, by }, hb, false, 0, 16.f);
+        by -= 20.f;
+        button(m_pageMenu, "Test Alert", menu_selector(BufferMenu::onStreamTestGift), { rx + 10.f + hb / 2.f, by }, hb, false, 0, 16.f);
+        button(m_pageMenu, "Clear Chat", menu_selector(BufferMenu::onStreamClearChat), { rx + 14.f + hb * 1.5f, by }, hb, false, 0, 16.f);
     }
 
 

@@ -26,6 +26,7 @@ namespace streamui::text {
         C_DEATH,        // just died
         C_PB,           // new personal best
         C_LEVEL,        // mentions the level by name ($L)
+        C_GO,           // the GO/GG wall: one wall, sent as several lines in a row
         C_COUNT
     };
 
