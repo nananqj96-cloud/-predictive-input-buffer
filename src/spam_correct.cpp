@@ -33,25 +33,29 @@ namespace spamcorrect {
         if (down) {
             // a press
             if (state == State::Idle || state == State::Detect) {
-                if (lastPressTick >= 0) {
-                    int gap = tick - lastPressTick;
-                    // threshold in ticks at 240 TPS: 1000/threshold_cps * 240 / 1000
-                    int threshold = 240 / spamRateThreshold();
-                    if (gap <= threshold) {
-                        // fast press — potential spam
-                        if (state == State::Idle) {
-                            state = State::Detect;
-                            detectTimer = 0.f;
-                        }
-                    } else {
-                        // pattern broken
-                        if (state == State::Detect) {
-                            state = State::Idle;
-                            detectTimer = 0.f;
-                        }
+                // add to rolling window (1 second = 240 ticks at 240 TPS)
+                pressTicks.push_back(tick);
+                // remove presses older than 1 second
+                int cutoff = tick - 240;
+                while (!pressTicks.empty() && pressTicks.front() <= cutoff) {
+                    pressTicks.erase(pressTicks.begin());
+                }
+                // update current CPS
+                currentCps = static_cast<int>(pressTicks.size());
+                // check if CPS exceeds threshold
+                if (currentCps >= spamRateThreshold()) {
+                    if (state == State::Idle) {
+                        state = State::Detect;
+                        detectTimer = 0.f;
+                    }
+                } else {
+                    // pattern broken — go back to Idle if well below threshold
+                    if (state == State::Detect && currentCps < spamRateThreshold() / 2) {
+                        state = State::Idle;
+                        detectTimer = 0.f;
+                        pressTicks.clear();
                     }
                 }
-                lastPressTick = tick;
             } else if (state == State::Active) {
                 // player is still pressing — keep generating clicks, reset release timer
                 releaseTimer = 0.f;
@@ -63,9 +67,8 @@ namespace spamcorrect {
         } else {
             // a release
             if (state == State::Release) {
-                // player is still releasing — keep waiting
-                releaseTimer = 0.f;
                 state = State::Active;
+                releaseTimer = 0.f;
             }
         }
     }
@@ -85,7 +88,8 @@ namespace spamcorrect {
                     activeTimer = 0.f;
                     clickTimer = 0.f;
                     simulatedDown = false;
-                    lastPressTick = -1;  // don't track presses for release detection yet
+                    pressTicks.clear();
+                    lastPressTick = -1;
                 }
                 break;
 
@@ -104,7 +108,7 @@ namespace spamcorrect {
                 }
                 // check if player has stopped inputting
                 // (no press events for releaseTime seconds)
-                // We track this via releaseTimer, which is reset on each input.
+                // We track this via releaseTimer, which is reset on each press.
                 // But in Active, inputs are blocked — we still see them via onInput.
                 // If no input for releaseTime, go to Release.
                 releaseTimer += dt;
@@ -125,7 +129,9 @@ namespace spamcorrect {
                     state = State::Idle;
                     releaseTimer = 0.f;
                     clickTimer = 0.f;
+                    pressTicks.clear();
                     lastPressTick = -1;
+                    currentCps = 0;
                 }
                 break;
         }
@@ -139,6 +145,8 @@ namespace spamcorrect {
         clickTimer = 0.f;
         simulatedDown = false;
         lastPressTick = -1;
+        pressTicks.clear();
+        currentCps = 0;
     }
 
     void Corrector::panic() {
@@ -150,6 +158,8 @@ namespace spamcorrect {
         clickTimer = 0.f;
         simulatedDown = false;
         lastPressTick = -1;
+        pressTicks.clear();
+        currentCps = 0;
     }
 
     // ---- testable pure logic ----

@@ -188,6 +188,9 @@ namespace macroplayer {
         if (idx == activeIdx) {
             stop();
         }
+        auto& e = entries[idx];
+        std::error_code ec;
+        std::filesystem::remove(macroDir() / e.file, ec);
         entries.erase(entries.begin() + idx);
         save();
     }

@@ -1,13 +1,14 @@
 // FrameWave v3.4: alternate spam corrector.
 //
-// Alternate spamming = alternating between two inputs/fingers to reach very high click rates
-// (wave spam, ship spam). The corrector detects it from the press timing, then takes over:
-// it blocks the player's raw inputs and generates clicks at a user-set CPS, timed to the
+// Alternate spamming = pressing very fast to reach high click rates
+// (wave spam, ship spam). The corrector detects it from the press count
+// in a rolling 1-second window, then takes over: it blocks the player's
+// raw inputs and generates clicks at a user-set CPS, timed to the
 // physics ticks so the rate stays consistent.
 //
 // State machine:
-//   IDLE    — watch recent press timestamps in a rolling window
-//   DETECT  — alternate-spam pattern held for `detectTime` → ACTIVE
+//   IDLE    — watch recent press timestamps in a rolling 1-second window
+//   DETECT  — CPS exceeds threshold, hold for `detectTime` → ACTIVE
 //   ACTIVE  — block raw inputs, generate clicks at CPS
 //   RELEASE — player stops → wait `releaseTime` → stop clicks, unblock, go to IDLE
 //
@@ -17,6 +18,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 namespace spamcorrect {
 
@@ -26,10 +28,13 @@ namespace spamcorrect {
 
         // ---- settings (read from saved values by main.cpp) ----
         bool enabled = false;
-        int cps = 30;              // clicks per second (no cap)
-        float detectTime = 0.5f;   // seconds the spam pattern must hold → ACTIVE
+        int cps = 30;              // target clicks per second when active
+        float detectTime = 0.5f;   // seconds the CPS must stay above threshold → ACTIVE
         float releaseTime = 0.5f;  // seconds of no input → RELEASE
         int sensitivity = 2;       // 1=fast only, 2=medium, 3=eager
+
+        // ---- live state (read by the menu) ----
+        int currentCps = 0;        // player's actual CPS in the rolling window
 
         // ---- state machine ----
         enum class State { Idle, Detect, Active, Release };
@@ -62,7 +67,7 @@ namespace spamcorrect {
     private:
         // detection state
         int lastPressTick = -1;     // tick of the last press
-        int pressCount = 0;         // presses in the current detection window
+        std::vector<int> pressTicks; // rolling window of press ticks (last 1 second)
         int windowStart = -1;       // tick where the current detection window started
         float detectTimer = 0.f;    // how long the spam pattern has been held
         float releaseTimer = 0.f;   // how long the player has been silent (in Release)
@@ -75,5 +80,9 @@ namespace spamcorrect {
 
         // helper: the minimum press rate (presses/sec) that counts as spam, given sensitivity
         int spamRateThreshold() const;
+
+    public:
+        // expose threshold for UI display
+        int threshold() const { return spamRateThreshold(); }
     };
 }

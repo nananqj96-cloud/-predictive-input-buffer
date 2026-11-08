@@ -11687,7 +11687,9 @@ private:
         player.load();
         player.refreshList();
 
-        // refresh button, top right
+        // refresh + folder buttons, top right
+        button(m_pageMenu, "Folder", menu_selector(BufferMenu::onMacros),
+            { W - 40.f - 50.f - 6.f - 60.f, H - HEAD / 2.f }, 50.f, false, 0, 15.f, ccColor3B { 80, 140, 200 });
         button(m_pageMenu, "Refresh", menu_selector(BufferMenu::onMacroRefresh),
             { W - 40.f - 60.f, H - HEAD / 2.f }, 60.f, false, 0, 15.f);
 
@@ -11786,35 +11788,38 @@ private:
         label(m_page, "State: " + std::string(stateName[static_cast<int>(sc.state)]),
             0.34f, sc.state == spamcorrect::Corrector::State::Active ? ccColor3B { 255, 160, 60 } : m_muted,
             { rx + 12.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("cps: {}/{}", sc.currentCps, sc.threshold()),
+            0.30f, sc.currentCps >= sc.threshold() ? ccColor3B { 255, 160, 60 } : m_muted,
+            { rx + colW - 12.f, ry }, { 1.f, 0.5f });
         ry -= 18.f;
 
-        // CPS
+        // CPS (target click rate when active)
         label(m_page, "Clicks/sec", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
-        label(m_page, std::to_string(sc.cps), 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
-        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamCps), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
-        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamCps), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        label(m_page, std::to_string(sc.cps), 0.36f, m_cyan, { rx + colW - 58.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamCps), { rx + colW - 36.f, ry }, 14.f, false, -1, 16.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamCps), { rx + colW - 14.f, ry }, 14.f, false, 1, 16.f);
         ry -= 18.f;
 
         // detect time
         label(m_page, "Detect time", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
-        label(m_page, fmt::format("{:.1f}s", sc.detectTime), 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
-        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamDetect), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
-        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamDetect), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        label(m_page, fmt::format("{:.1f}s", sc.detectTime), 0.36f, m_cyan, { rx + colW - 58.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamDetect), { rx + colW - 36.f, ry }, 14.f, false, -1, 16.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamDetect), { rx + colW - 14.f, ry }, 14.f, false, 1, 16.f);
         ry -= 18.f;
 
         // release time
         label(m_page, "Release time", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
-        label(m_page, fmt::format("{:.1f}s", sc.releaseTime), 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
-        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamRelease), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
-        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamRelease), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        label(m_page, fmt::format("{:.1f}s", sc.releaseTime), 0.36f, m_cyan, { rx + colW - 58.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamRelease), { rx + colW - 36.f, ry }, 14.f, false, -1, 16.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamRelease), { rx + colW - 14.f, ry }, 14.f, false, 1, 16.f);
         ry -= 18.f;
 
         // sensitivity
         label(m_page, "Sensitivity", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
         const char* sensName[] = { "", "fast", "medium", "eager" };
-        label(m_page, sensName[sc.sensitivity], 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
-        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamSensitivity), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
-        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamSensitivity), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        label(m_page, sensName[sc.sensitivity], 0.36f, m_cyan, { rx + colW - 58.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamSensitivity), { rx + colW - 36.f, ry }, 14.f, false, -1, 16.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamSensitivity), { rx + colW - 14.f, ry }, 14.f, false, 1, 16.f);
         ry -= 22.f;
 
         // panic button
@@ -13698,14 +13703,24 @@ namespace {
         // v3.4: per-macro keybinds — capture key presses and check if any macro is bound to them.
         // Only in-game (play layer exists), so menu keybinds don't accidentally trigger macros.
         KeyboardInputEvent{}.listen([](KeyboardInputData& data) {
+            if (data.action != KeyboardInputData::Action::Press) {
+                return false;
+            }
+            auto& player = macroplayer::Player::get();
+            // check if we're capturing a key for a macro (works in menu and in-game)
+            if (player.captureIdx >= 0) {
+                std::string keyStr = geode::Keybind(data.key, data.modifiers).toString();
+                player.bindKey(player.captureIdx, keyStr);
+                player.captureIdx = -1;
+                say("bound to {}", keyStr);
+                return false;
+            }
+            // in-game: check if any macro is bound to this key
             auto* layer = GameManager::get()->m_playLayer;
             if (!layer) {
                 return false;
             }
-            if (data.action != KeyboardInputData::Action::Press) {
-                return false;
-            }
-            macroplayer::Player::get().onKeyPress(geode::Keybind(data.key, data.modifiers).toString());
+            player.onKeyPress(geode::Keybind(data.key, data.modifiers).toString());
             return false;
         }).leak();
     }
