@@ -91,6 +91,14 @@ Alternate spamming (wave/ship flapping between two inputs) is fast enough that t
 - **Reset**: on death, pause, level exit, and level complete.
 - **Settings**: enable toggle, clicks/sec (1-200), detect time (0.2-2.0s), release time (0.2-2.0s), sensitivity (fast/medium/eager).
 
+## v3.4.1: Pulse Trigger Repaint
+A new **Repaint** tab lets you repaint every pulse trigger in the level at once. Pick any colour from the built-in colour picker and apply it: the mod finds every pulse trigger (object type 27) in the editor and sets its colour to the one you chose.
+
+- **Colour picker**: opens Geode's built-in `ColorPickPopup` — RGB sliders, hex input, opacity.
+- **Apply**: scans all editor objects, finds every pulse trigger, and repaints it.
+- **Status**: shows how many pulse triggers were found and repainted.
+- **Persistence**: the chosen colour is saved to the mod's settings (repaint-r/g/b).
+
 ## v3.0
 - **Autoplay** (for showcases, test mode: nothing is saved as progress and AUTOPLAY stays on screen): plans a route up to 10 s ahead while it plays, a pathfinder for wave and ship, and it learns from its deaths.
 - **Macros**: autoplay plays GD Replay (GDR) macros: your own in the Macros Folder, or one it downloads from [Hyperbolus](https://hyperbolus.net) (used with its owner's permission, every macro credited). It lines the macro up by itself, keeps you on its path with the bot's position records, plans the parts a macro dies in, and plays 2-player levels with each player's clicks.

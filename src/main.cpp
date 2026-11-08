@@ -31,6 +31,7 @@
 #include <Geode/modify/EndLevelLayer.hpp>
 #include <Geode/ui/GeodeUI.hpp>
 #include <Geode/ui/Popup.hpp>
+#include <Geode/ui/ColorPickPopup.hpp>
 #include <map>
 #include <Geode/modify/PlayerObject.hpp>
 #include <Geode/modify/RingObject.hpp>
@@ -9768,12 +9769,27 @@ class BufferMenu : public geode::Popup {
         { "save-ding", "Ding On Save", "A sound when a click is saved" },
         { "performance-mode", "Performance Mode", "Lighter searches for weak phones" },
     };
-    static constexpr char const* TABS[] = { "Log", "Stage", "Modes", "Tools", "Stream", "Macros", "Account" };  // v3.4: Macros
-    static constexpr int TAB_ACCOUNT = 6;
-    static constexpr int TAB_TUNING = 7;
-    static constexpr int TAB_SETTINGS = 8;
+    static constexpr char const* TABS[] = { "Log", "Stage", "Modes", "Tools", "Stream", "Macros", "Repaint", "Account" };  // v3.4: Macros, Repaint
+    static constexpr int TAB_ACCOUNT = 7;
+    static constexpr int TAB_TUNING = 8;
+    static constexpr int TAB_SETTINGS = 9;
     static constexpr int TAB_STREAM = 4;
     static constexpr int TAB_MACROS = 5;
+    static constexpr int TAB_REPAINT = 6;
+    // v3.4.1: repaint tab — chosen colour (persisted in mod settings as three ints)
+    static ccColor3B repaintColor() {
+        return {
+            static_cast<unsigned char>(Mod::get()->getSavedValue<int>("repaint-r", 255)),
+            static_cast<unsigned char>(Mod::get()->getSavedValue<int>("repaint-g", 95)),
+            static_cast<unsigned char>(Mod::get()->getSavedValue<int>("repaint-b", 140))
+        };
+    }
+    static void setRepaintColor(ccColor3B const& c) {
+        Mod::get()->setSavedValue("repaint-r", static_cast<int>(c.r));
+        Mod::get()->setSavedValue("repaint-g", static_cast<int>(c.g));
+        Mod::get()->setSavedValue("repaint-b", static_cast<int>(c.b));
+    }
+    static inline std::string repaintStatus = "";
     // stage buttons: Off, then the stages from small to big, then Custom (per-mode frames)
     static constexpr int STAGE_BTN[] = { 7, 0, 1, 2, 3, 4, 5 };
     static constexpr char const* STAGE_LABEL[] = { "Off", "0.5f", "1f", "2f", "4f", "6f", "8f" };
@@ -11132,6 +11148,46 @@ private:
         say("alternate spam corrector: stopped");
     }
 
+    // ---- v3.4.1: repaint handlers ----
+    void onRepaintPick(CCObject*) {
+        auto* self = this;
+        auto* popup = geode::ColorPickPopup::create(repaintColor());
+        popup->setCallback([self](ccColor4B const& color) {
+            setRepaintColor({ color.r, color.g, color.b });
+            if (s_open == self) {
+                self->rebuildPage();
+            }
+        });
+        popup->show();
+    }
+
+    void onRepaintApply(CCObject*) {
+        auto* editor = LevelEditorLayer::get();
+        if (!editor) {
+            repaintStatus = "Open the editor first.";
+            rebuildPage();
+            return;
+        }
+        int count = 0;
+        auto rc = repaintColor();
+        if (editor->m_objects) {
+            for (auto* object : CCArrayExt<GameObject*>(editor->m_objects)) {
+                if (!object) continue;
+                if (static_cast<int>(object->m_objectType) == 27) {
+                    object->m_color1 = rc;
+                    object->setChildColor(rc);
+                    count++;
+                }
+            }
+        }
+        if (count == 0) {
+            repaintStatus = "No pulse triggers found in the level.";
+        } else {
+            repaintStatus = "Repainted " + std::to_string(count) + " pulse trigger(s).";
+        }
+        rebuildPage();
+    }
+
     void onStreamTtsClear(CCObject*) {
         streamui::ttsClear();
         rebuildPage();
@@ -11767,6 +11823,38 @@ private:
             { rx + colW / 2.f, ry }, colW - 14.f, false, 0, 16.f, ccColor3B { 235, 80, 90 });
     }
 
+    // ---- v3.4.1: the Repaint tab ----
+    void pageRepaint() {
+        pageTitle("Repaint");
+        float x = contentX(), w = contentW(), top = contentTop();
+        float bottom = FOOT + 30.f;
+
+        card({ x, bottom, w, top - bottom }, "Pulse Trigger Repaint", "pick a colour, repaint every pulse");
+
+        auto rc = repaintColor();
+        float cy = top - 70.f;
+
+        // colour preview circle
+        auto* d = CCDrawNode::create();
+        m_page->addChild(d, 1);
+        circle(d, { x + 40.f, cy }, 24.f, col(rc, 1.f), 48);
+        circle(d, { x + 40.f, cy }, 24.f, { 0, 0, 0, 0 }, 1.5f, col(m_t.main, 0.7f));
+
+        label(m_page, "Colour", 0.34f, m_muted, { x + 40.f, cy - 36.f }, { 0.5f, 0.5f });
+
+        // pick button
+        button(m_pageMenu, "Pick Colour", menu_selector(BufferMenu::onRepaintPick),
+            { x + 40.f, cy - 56.f }, 100.f, true, 0, 22.f);
+
+        // apply button
+        button(m_pageMenu, "Apply to Pulse Triggers", menu_selector(BufferMenu::onRepaintApply),
+            { x + w / 2.f, cy - 56.f }, 160.f, true, 0, 22.f, ccColor3B { 80, 205, 120 });
+
+        // status
+        label(m_page, repaintStatus, 0.36f, m_cyan, { x + 12.f, bottom + 14.f }, { 0.f, 0.5f })
+            ->limitLabelWidth(w - 24.f, 0.36f, 0.2f);
+    }
+
     void pageAccount() {
         pageTitle("Account");
         float x = contentX(), w = contentW(), top = contentTop();
@@ -11952,6 +12040,7 @@ private:
             case 3: pageTools(); break;
             case TAB_STREAM: pageStream(); break;
             case TAB_MACROS: pageMacros(); break;
+            case TAB_REPAINT: pageRepaint(); break;
             case TAB_ACCOUNT: pageAccount(); break;
             case TAB_TUNING: pageTuning(); break;
             case TAB_SETTINGS: pageSettings(); break;
