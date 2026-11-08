@@ -11174,7 +11174,6 @@ private:
             for (auto* object : CCArrayExt<GameObject*>(editor->m_objects)) {
                 if (!object) continue;
                 if (static_cast<int>(object->m_objectType) == 27) {
-                    object->m_color1 = rc;
                     object->setChildColor(rc);
                     count++;
                 }
@@ -11838,7 +11837,7 @@ private:
         auto* d = CCDrawNode::create();
         m_page->addChild(d, 1);
         circle(d, { x + 40.f, cy }, 24.f, col(rc, 1.f), 48);
-        circle(d, { x + 40.f, cy }, 24.f, { 0, 0, 0, 0 }, 1.5f, col(m_t.main, 0.7f));
+        circle(d, { x + 40.f, cy }, 24.f, { 0, 0, 0, 0 }, 48, 1.5f, col(m_t.main, 0.7f));
 
         label(m_page, "Colour", 0.34f, m_muted, { x + 40.f, cy - 36.f }, { 0.5f, 0.5f });
 
@@ -13615,7 +13614,7 @@ namespace {
         // cases 6-8 (macro toggle, spam corrector, spam panic) work everywhere
         if (action >= 6) {
             switch (action) {
-                case 6:
+                case 6: {
                     // macro toggle — works in-game and in menu
                     auto& mp = macroplayer::Player::get();
                     if (mp.enabled) {
@@ -13626,7 +13625,8 @@ namespace {
                         say("macro playback on");
                     }
                     break;
-                case 7:
+                }
+                case 7: {
                     // spam corrector toggle — works in-game and in menu
                     auto& sc2 = spamcorrect::Corrector::get();
                     sc2.enabled = !sc2.enabled;
@@ -13636,11 +13636,13 @@ namespace {
                         sc2.panic();
                     }
                     break;
-                case 8:
+                }
+                case 8: {
                     // spam panic
                     spamcorrect::Corrector::get().panic();
                     say("alternate spam corrector: stopped");
                     break;
+                }
             }
             return;
         }
