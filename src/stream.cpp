@@ -616,8 +616,7 @@ namespace streamui {
             CCNode* header = nullptr;             // optional "GdStream" wordmark above the panel
             CCLabelBMFont* headGd = nullptr;
             CCLabelBMFont* headStream = nullptr;
-            CCClippingNode* rowsHost = nullptr;   // clips the chat rows to the panel
-            CCDrawNode* rowStencil = nullptr;
+            CCNode* rowsHost = nullptr;   // parent of the row stack
             CCNode* chip = nullptr;        // small settings chip, shown while the menu is closed
             CCDrawNode* chipDraw = nullptr;
             std::function<void()> onChip = nullptr;
@@ -1031,13 +1030,12 @@ namespace streamui {
             // created here.
 
             // ---------------- chat rows ----------------
-            // One clipping node for the whole stack (not one per row: 110 stencils is a lot of
-            // state changes on a phone). A long message is cut at the glass edge instead of running
-            // off the panel and under the viewer pill.
-            O.rowStencil = CCDrawNode::create();
-            O.rowsHost = CCClippingNode::create(O.rowStencil);
-            O.rowsHost->setAlphaThreshold(0.01f);
-            O.chat->addChild(O.rowsHost, 1);
+            // No clipping node here on purpose. cocos2d-x draws a stencil with the modelview matrix
+            // loaded to identity, so a stencil built in the panel's local space ends up cutting at
+            // the bottom-left corner of the *screen*: every row got clipped away and the panel went
+            // blank. Rows are cut by measuring the text instead (see wrapLine), which cannot fail
+            // this way.
+            O.rowsHost = newNode(O.chat, 1);
             // 110 rows is more than a 900px panel can show at the smallest font, so a resize
             // never runs out
             O.rows.resize(110);
@@ -1290,11 +1288,6 @@ namespace streamui {
                 O.chip->setPosition({ x, y });
             }
 
-            if (O.rowsHost) {
-                O.rowsHost->setContentSize(r.size);
-                O.rowStencil->clear();
-                rectFill(O.rowStencil, { 0.f, 0.f, r.size.width, r.size.height }, { 1.f, 1.f, 1.f, 1.f });
-            }
             rewrapAll();
             relayoutRows();
         }
@@ -1430,6 +1423,29 @@ namespace streamui {
         }
 
         // wraps one line for the current panel width and caches the result on it
+        // cuts a string down until it fits maxW, appending "..." when anything was dropped
+        std::string truncateToWidth(std::string const& in, float maxW, float scale, char const* fnt) {
+            if (in.empty() || textW(in, scale, fnt) <= maxW) {
+                return in;
+            }
+            std::string cut = in;
+            for (int i = 0; i < 200 && !cut.empty(); ++i) {
+                size_t sp = cut.find_last_of(' ');
+                if (sp == std::string::npos || sp < 8) {
+                    break;
+                }
+                cut = cut.substr(0, sp);
+                if (textW(cut + "...", scale, fnt) <= maxW) {
+                    return cut + "...";
+                }
+            }
+            // one enormous word: cut characters instead
+            while (cut.size() > 4 && textW(cut + "...", scale, fnt) > maxW) {
+                cut.pop_back();
+            }
+            return cut + "...";
+        }
+
         void wrapLine(LineView& v, float panelWidth) {
             float scale = 0.62f;
             float x = 6.f;
@@ -1446,6 +1462,11 @@ namespace streamui {
             v.wrapped = wrapText(v.body, scale, "chatFont.fnt", avail, &linesH);
             if (v.wrapped.size() > 3) {
                 v.wrapped.resize(3);
+            }
+            // nothing may ever be wider than the space it has: the last line is cut if a single
+            // word ran past the edge, and the first line too when there is only one
+            for (auto& line : v.wrapped) {
+                line = truncateToWidth(line, avail, scale, "chatFont.fnt");
             }
             v.height = O.lineH * static_cast<float>(std::max<size_t>(v.wrapped.size(), 1)) + 1.f;
         }
@@ -1700,6 +1721,31 @@ namespace streamui {
             return static_cast<int>(std::clamp(v, 5.f, 1000.f));
         }
 
+        // A donation in a GD chat is loud shorthand, not a paragraph: it is upper-cased about half
+        // the time and short lines get the same shouty treatment chat does.
+        std::string giftVoice(std::string text, uint32_t& s) {
+            if (text.empty()) {
+                return text;
+            }
+            bool alreadyLoud = std::none_of(text.begin(), text.end(), [](char c) { return c >= 'a' && c <= 'z'; });
+            if (alreadyLoud) {
+                return text;
+            }
+            if (rndf(s) < 0.55f) {
+                for (auto& c : text) {
+                    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+                }
+                return text;
+            }
+            if (text.size() < 26 && rndf(s) < 0.35f) {
+                size_t i = text.find_last_of("aeoAEO");
+                if (i != std::string::npos && text[i] >= 'a' && text[i] <= 'z') {
+                    text.insert(i + 1, std::string(2 + rnd32(s) % 3, text[i]));
+                }
+            }
+            return text;
+        }
+
         std::string pickGiftMessage(uint32_t& s, int amount) {
             // the user's own lines are used too, and get the same $P / $A / $N treatment
             if (!gCustomGifts.empty() && rndf(s) < 0.25f) {
@@ -1721,7 +1767,7 @@ namespace streamui {
             g.color = b ? paletteColor(b->color) : ccColor3B { 255, 255, 255 };
             g.badge = b ? b->badge : 0;
             g.amount = randomAmount(s);
-            g.message = fillRun(pickGiftMessage(s, g.amount));
+            g.message = giftVoice(fillRun(pickGiftMessage(s, g.amount)), s);
             g.t = 0.f;
             g.queued = false;
             O.activeGift = g;
@@ -2475,7 +2521,6 @@ namespace streamui {
         O.giftMsg[0] = O.giftMsg[1] = nullptr;
         O.giftFoot = nullptr;
         O.rowsHost = nullptr;
-        O.rowStencil = nullptr;
         O.header = nullptr;
         O.headGd = nullptr;
         O.headStream = nullptr;

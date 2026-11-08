@@ -252,7 +252,6 @@ namespace streamui::text {
                 "what's your hardest", "what is your hardest demon",
                 "have you beaten bloodbath", "when's the next video",
                 "youtube upload when", "is there a vod",
-                "the chat overlay is clean", "how did you set up the overlay",
                 "what keyboard do you use", "mechanical keyboard asmr",
                 "i can hear every single click", "that clicking is satisfying",
                 "who's the mod in chat", "mods are asleep",
@@ -261,11 +260,7 @@ namespace streamui::text {
                 "attempt counter is at a scary number", "this attempt feels different",
                 "the level looks pretty", "the deco on this level goes hard",
                 "this part looks impossible", "that part is definitely impossible",
-                "the bar at the bottom is so satisfying", "i love the overlay",
-                "the layout is so clean today", "who made the overlay",
-                "is that a custom chat", "the colors on the chat are nice",
-                "my stream is nothing compared to this", "teach me how to edit like this",
-                "the thumbnail for this stream goes hard",
+                "the bar at the bottom is so satisfying", "that progress bar is crawling",
                 "i came from the youtube clip", "the clip brought me here",
                 "that clip of the 99 death is why i'm here",
             });
@@ -273,7 +268,7 @@ namespace streamui::text {
             cross(v, { "anyone know", "quick question,", "question for chat", "someone tell me" },
                 { " how the ship works", " how to get better at wave", " what the best level to start with is",
                     " how long this level is", " how many attempts that is", " what song this is",
-                    " what that counter is", " which mod does that", " what the bpm thing is" });
+                    " what that song is called", " which mod does that", " how many attempts he's on" });
 
             cross(v, { "i'm", "bro i'm", "honestly i'm", "not gonna lie i'm" },
                 { " so invested in this run", " nervous and i'm not even playing", " sweating watching this",
@@ -678,7 +673,6 @@ namespace streamui::text {
             putAll(fun, {
                 "do you think you'll die at 97 again?", "serious question: do you actually enjoy this level?",
                 "how do you still have hands after 3 hours?", "what's the plan if you never beat this",
-                "is the heart monitor real or are you just built like that",
                 "how many keyboards have you broken", "do you sleep or is that a myth",
                 "how do you not get angry, teach me", "what do you eat during a 6 hour session",
                 "be honest: how many attempts today",
@@ -703,26 +697,55 @@ namespace streamui::text {
                 { " stay this calm", " get this good at wave", " not break your keyboard",
                     " learn to straight fly", " start playing gd" });
 
+            // Donors in a GD chat are not a support group. They are the loudest people in the
+            // room: short, loud, certain, and taking the mickey. No "we believe in you" speeches.
             auto& push = b[G_PUSH];
             putAll(push, {
-                "you got this bro", "lock in, we believe", "i know you can do this",
-                "one day you'll look back at this and laugh",
-                "take a breath and run it back", "don't let the level win",
-                "you've come too far to stop now", "this is your level, finish it",
-                "chat is behind you 100%", "you're the most consistent player i watch",
-                "keep the same pace, it's working",
-                "your practice mode grind is going to pay off",
-                "every death is data, keep going",
-                "take a five minute break and come back stronger",
-                "you're so close, don't stop now", "we're all here with you",
-                "we believe in you", "you're going to get this today",
-                "this is the stream where it happens",
-                "you've already proven you can get there",
-                "just do what you did in practice mode",
-                "you're the reason i still watch gd streams",
-                "keep going king", "the grind will pay off, it always does",
-                "rest if you need, chat will wait",
-                "hydrate and lock back in", "stretch your hands and go again",
+                "$5 for the win, don't make me look stupid",
+                "GO GO GO GO GO", "LOCK IN", "LOCK IN CHAT", "CLUTCH IT", "DON'T CHOKE",
+                "TAKE IT HOME", "FINISH IT", "ONE MORE", "CLICK IT", "HOLD IT", "SEND IT",
+                "cooking. absolutely cooking", "he's cooking, everyone stay calm",
+                "BRO IS COOKING", "BRO IS LOCKED IN", "WE ARE SO BACK", "IT'S HAPPENING",
+                "ABSOLUTE CINEMA", "this is cinema", "no shot he chokes this",
+                "if you die here i'm refunding", "no pressure but everything is on this",
+                "i paid $20 to watch you click one block",
+                "do it for the clip", "clip it if he wins", "this is going in the compilation",
+                "don't you dare die at 99", "beat it so i can go to bed",
+                "i've bet my rent on this attempt", "my money is on the win, go",
+                "only donated to say GO", "donating every attempt until you win",
+                "go on then, prove the chat wrong",
+                "you've got one job", "it's one block. hit it",
+                "this attempt feels different, don't waste it",
+                "i'm not even watching, i'm just here for the reaction",
+                "send it chat, he needs the noise",
+                "all in on this run", "let's see it", "we're watching, do something",
+                "WAKE UP", "MUGA", "LETS GO CHAT", "CLEAN IT", "TAKE THE WIN",
+            });
+
+            // short and loud, the way people actually donate to a GD stream
+            putAll(b[G_PUSH], {
+                "GO GO GO GO GO GO", "NO WAY", "NO WAYYYY", "HOLY SHIT", "BRO IS COOKING",
+                "BRO IS ACTUALLY COOKING", "LOCK IN", "LOCK IN CHAT", "MUGA", "WE ARE SO BACK",
+                "WE ARE NEVER SO BACK", "ABSOLUTE CINEMA", "97", "97 AGAIN", "THE 97 CURSE",
+                "CLIP THAT", "CLIP IT", "DON'T CHOKE", "CHOKING INCOMING", "I CAN'T WATCH",
+                "I'M NOT BREATHING", "ONE CLICK", "ONE MORE", "PLEASE", "PLEASE GOD",
+                "FINISH IT", "SEND IT", "TAKE THE WIN", "HIT THE LAST BLOCK",
+                "IF YOU DIE HERE I'M DONE", "IF YOU WIN I'LL DONATE AGAIN",
+                "DO IT FOR THE COMPILATION", "BEAT IT SO I CAN SLEEP",
+                "I CAME HERE TO SEE A CHOKE", "PROVE ME WRONG", "PROVE CHAT WRONG",
+                "THAT'S THE RUN", "THAT'S THE ONE", "THIS IS THE ATTEMPT",
+                "LET'S GOOOOO", "LET'S GO CHAT", "WAKE UP CHAT", "STAY LOCKED IN",
+                "HE'S LOCKED IN", "HE'S COOKING", "KING", "WHAT A RUN",
+                "GOOD LUCK BRO", "GOOD LUCK", "WIN IT", "SMASH IT", "CLEAN IT",
+                "GG IF YOU WIN", "GG EITHER WAY", "I'M SHAKING", "MY HEART",
+                "DON'T THINK JUST CLICK", "TRUST YOUR HANDS", "SAME PACE",
+                "MOMENTUM", "KEEP THE RUN", "DON'T RESET", "PLAY IT OUT",
+                "SEND THE CLIP", "PUT IT ON YOUTUBE", "THIS IS CINEMA",
+                "BEST STREAM TODAY", "1 MORE ATTEMPT", "LAST ONE I PROMISE",
+                "OK NOW SERIOUSLY WIN", "GOOD LUCK ON THE LAST PART",
+                "NOT THE ENDING PLEASE", "THE ENDING IS CURSED",
+                "YOU HAD IT", "SO CLOSE", "PAIN", "ACTUAL PAIN",
+                "I FELT THAT", "THAT ONE HURT", "THAT WAS PERSONAL",
             });
 
             auto& pred = b[G_PREDICT];
@@ -804,18 +827,16 @@ namespace streamui::text {
                 "i'm downloading this level so i can hate it myself",
                 "the song in this level is so good",
                 "i've been here for 4 hours and i regret nothing",
-                "best stream on twitch right now, not even close",
-                "your overlay is cleaner than most big streamers",
-                "first time donating, love the stream",
-                "i've been watching since 20 viewers, insane growth",
-                "that heart rate thing is stressing me out more than you",
-                "the chat overlay makes this feel like a real event",
-                "this stream deserves 10x the viewers",
-                "i tell everyone about this stream",
-                "the highlight reel is going to be insane",
-                "your thumbnails are getting better every week",
-                "i came from the clip and i'm staying",
-                "this is the only stream i watch live",
+                "$10 says you die at 97 again",
+                "if you beat this i'll donate $50, and i know you won't",
+                "i'm only here for the choke and you keep not choking",
+                "donated so i can say i was here for the win",
+                "donated so i can say i was here for the choke, whichever",
+                "this is my fourth donation tonight, win something",
+                "i have donated more than you've gained percent",
+                "beat it and i'll stop donating. so don't.",
+                "5 dollars to tell you the ending is cursed",
+                "money is on 99. prove me wrong",
             });
         }
 
@@ -856,9 +877,8 @@ namespace streamui::text {
             static char const* ASK_HEADS[] = { "does anyone know ", "can someone tell me ", "seriously, ",
                 "real question: ", "chat, " };
             static char const* ASK_TAILS[] = { "how long this level is", "what his hardest is",
-                "how many attempts that was", "what the timer is counting", "if that's a real heart monitor",
-                "how the bpm thing works", "what the counter on the left is", "if he's ever beaten this",
-                "how many hours he's played today", "what the overlay is called", "if this is on youtube" };
+                "how many attempts that was", "what the timer is counting",
+                "how many hours he's played today", "which demon this is", "how far he's got before" };
             cross(b[C_NORMAL], ASK_HEADS, ASK_TAILS);
 
             static char const* SMALL_HEADS[] = { "hi ", "hey ", "hello ", "yo ", "morning ", "good luck " };
@@ -874,20 +894,20 @@ namespace streamui::text {
         }
 
         void buildClauseGifts(std::array<Lines, 16>& b) {
-            static char const* HEADS[] = { "i've been watching you for ", "i've been in this chat for ",
+            static char const* HEADS[] = { "i've been watching you die for ", "i've been in this chat for ",
                 "been here for ", "watching since " };
-            static char const* TAILS[] = { " three hours and this is the best stream i've seen",
-                " two months, you've improved so much", " the whole day, worth every minute",
-                " the beginning and this is unreal", " an hour and i'm fully invested",
-                " years, this community is special", " one stream and i already love it here" };
+            static char const* TAILS[] = { " three hours and you still can't do the last jump",
+                " two months and you're still at the same percent", " the whole day, absolute cinema",
+                " the beginning and you haven't improved once", " an hour and i've seen 40 deaths",
+                " years, the level always wins", " one stream and i already know how it ends" };
             cross(b[G_STREAM], HEADS, TAILS);
 
-            static char const* PUSH_HEADS[] = { "don't give up, ", "keep going, ", "you've got this, ",
-                "we believe in you, ", "take your time, " };
+            static char const* PUSH_HEADS[] = { "go on, ", "send it, ", "lock in, ", "clutch it, ", "one more, " };
             static char const* PUSH_TAILS[] = { "the level can't beat you forever",
-                "chat isn't going anywhere", "every attempt is progress",
-                "you're closer than you think", "the win is coming", "we'll be here when you get it",
-                "no rush, quality over speed", "we're all rooting for you" };
+                "chat is not going anywhere until you win", "every attempt is one closer to the choke",
+                "you're closer than you think and that's the problem", "the win is coming, probably",
+                "we'll be here when you die again", "no pressure, everything is on this",
+                "we're all screaming at you, in a nice way" };
             cross(b[G_PUSH], PUSH_HEADS, PUSH_TAILS);
 
             static char const* FUN_HEADS[] = { "honest question: ", "real question: ", "asking for a friend: ",
@@ -1097,19 +1117,19 @@ namespace streamui::text {
             for (int c = 0; c < G_COUNT; ++c) {
                 gbase[static_cast<size_t>(c)] = b[static_cast<size_t>(c)].size();
             }
-            expandFrom(b[G_PUSH], gbase[G_PUSH], { " you're going to get it", " chat is here for it",
+            expandFrom(b[G_PUSH], gbase[G_PUSH], { " do it for the clip", " and i mean it",
                 " keep the pace", " we believe", " after all this time", " no pressure" }, 3, 0);
             expandFrom(b[G_FUN], gbase[G_FUN], { "", " asking for a friend", " genuinely curious", " chat" }, 2, 1);
             expandFrom(b[G_JOKE], gbase[G_JOKE], { " and i stand by it", " not sorry", " honestly", " chat agrees" }, 2, 2);
             expandFrom(b[G_HIGH], gbase[G_HIGH], { " and i'm still not over it", " chat was unwell", " i needed a break" }, 2, 3);
             expandFrom(b[G_GD], gbase[G_GD], { " and that's a fact", " no notes", " respect", " trust me" }, 2, 4);
-            expandFrom(b[G_STREAM], gbase[G_STREAM], { "", " and i mean that", " best community on twitch" }, 2, 5);
+            expandFrom(b[G_STREAM], gbase[G_STREAM], { "", " and i mean that", " absolute cinema" }, 2, 5);
             expandFrom(b[G_PREDICT], gbase[G_PREDICT], { "", " prove me wrong", " i'll be here", " chat" }, 2, 6);
-            expandFrom(b[G_STREAM], gbase[G_STREAM], { " love this stream", " keep it up", " from a long time viewer" }, 1, 7);
+            expandFrom(b[G_STREAM], gbase[G_STREAM], { " unreal", " every time", " chat is right here" }, 1, 7);
             expandFrom(b[G_GD], gbase[G_GD], { " fact check me", " i said what i said", " gd 4 life" }, 1, 8);
             expandFrom(b[G_HIGH], gbase[G_HIGH], { " i'm not okay", " chat was not okay", " oh my god" }, 1, 9);
             expandFrom(b[G_JOKE], gbase[G_JOKE], { " and that's the truth", " sorry", " facts" }, 1, 10);
-            expandFrom(b[G_PUSH], gbase[G_PUSH], { " you've got this", " take your time", " we're not leaving" }, 1, 11);
+            expandFrom(b[G_PUSH], gbase[G_PUSH], { " GO", " now", " don't think about it" }, 1, 11);
             return finish(b, G_COUNT);
         }
 
