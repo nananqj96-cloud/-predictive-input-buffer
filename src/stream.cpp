@@ -941,7 +941,7 @@ namespace streamui {
             {
                 auto* l = CCLabelBMFont::create("menu", "chatFont.fnt");
                 l->setScale(0.36f);
-                l->setColor({ 200, 200, 215, 190 });
+                l->setColor({ 200, 200, 215 });
                 l->setPosition({ 20.f, 7.f });
                 O.chip->addChild(l, 1);
             }
