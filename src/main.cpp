@@ -5022,6 +5022,15 @@ namespace online {
             if (std::string_view(online::URL).empty()) {
                 return;
             }
+            // One request at a time. pageAccount() calls this whenever the account hasn't loaded
+            // yet, and a page is rebuilt on every setting change, so a slow or unreachable site
+            // left a request in flight and started another on every rebuild: sockets and threads
+            // piled up until the whole game crawled.
+            static bool inFlight = false;
+            if (inFlight) {
+                return;
+            }
+            inFlight = true;
             std::string url = fmt::format("{}/api/account?id={}", online::URL, online::id());
             std::thread([url] {
                 auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave").getSync(url);
@@ -5045,6 +5054,7 @@ namespace online {
                     }
                 }
                 queueInMainThread([st] {
+                    inFlight = false;   // the next refresh may go now (see the top of this function)
                     if (st.loaded) {
                         stats = st;
                         Mod::get()->setSavedValue("account-name", st.linked ? st.name : std::string());

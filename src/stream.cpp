@@ -584,6 +584,14 @@ namespace streamui {
             float t = 0.f;
             float life = 8.f;
             bool queued = true;
+            // The wrapped message and the card height are worked out once, when the donation
+            // starts, not on every frame of the alert: wrapText is a word loop and this was doing
+            // it twice per frame plus once more for the height, for eight seconds, per donation.
+            // A donation whose text never changes cannot need re-wrapping 480 times. The size is
+            // part of the key because resizing the panel changes the wrap.
+            std::string wrapKey;
+            std::vector<std::string> wrapped;
+            float cardH = 0.f;
         };
 
         struct Overlay {
@@ -698,6 +706,7 @@ namespace streamui {
         void buildOverlay();
         void layoutOverlay();
         float giftCardHeight(Gift const& g);
+        void wrapGift(Gift& g);
         void addLine(LineView line);
         void relayoutRows();
         void rewrapAll();
@@ -1229,6 +1238,9 @@ namespace streamui {
             // donation alert: the same right edge, under the monitor
             if (O.gift) {
                 float gw = 260.f * S.scale;
+                if (O.giftBusy) {
+                    wrapGift(O.activeGift);   // the height below reads the cached wrap
+                }
                 float gh = O.giftBusy ? giftCardHeight(O.activeGift) : 44.f * S.scale;
                 float gx = win.width - gw - 14.f;
                 float gy = heartY - gh - 22.f;
@@ -1787,9 +1799,32 @@ namespace streamui {
             O.gift->runAction(CCSpawn::create(slide, CCEaseBackOut::create(CCScaleTo::create(0.34f, 1.f)), nullptr));
         }
 
+        // fills in g.wrapped / g.cardH once per donation (and again only if the scale changed)
+        void wrapGift(Gift& g) {
+            float sc = S.scale;
+            // the scale is part of the key: resizing the panel changes the card width, so the wrap
+            // has to be redone. Nothing else about a donation changes while it is on screen.
+            std::string key = std::to_string(static_cast<long long>(std::lround(sc * 1000.f))) + '|' + g.message;
+            if (g.wrapKey == key) {
+                return;
+            }
+            g.wrapKey = key;
+            float gw = 260.f * sc;
+            float mscale = 0.56f * sc;
+            float mlh = lineHeight(mscale, "chatFont.fnt");
+            float wrappedH = 0.f;
+            g.wrapped = wrapText(g.message, mscale, "chatFont.fnt", gw - 22.f * sc, &wrappedH);
+            int n = g.message.empty() ? 0 : (wrappedH > 1.5f ? 2 : 1);
+            g.cardH = 40.f * sc + mlh * static_cast<float>(n) + (n ? 6.f * sc : 0.f);
+        }
+
         // the card is exactly as tall as its content: a name row, up to two message lines, and the
         // pink timer bar. It used to be a fixed 92px, which left a dead band under short messages.
         float giftCardHeight(Gift const& g) {
+            // measured already: painting happens every frame, this does not
+            if (g.cardH > 0.f) {
+                return g.cardH;
+            }
             float sc = S.scale;
             float gw = 260.f * sc;
             float mscale = 0.56f * sc;
@@ -1804,13 +1839,14 @@ namespace streamui {
             if (!O.giftBusy) {
                 return;
             }
+            // the wrap is cached on the gift: this runs every frame for the length of the alert
+            wrapGift(O.activeGift);
             auto const& g = O.activeGift;
             float sc = S.scale;
             float gw = 260.f * sc;
             float mscale = 0.56f * sc;
             float mlh = lineHeight(mscale, "chatFont.fnt");
-            float wrappedH = 0.f;
-            auto wrapped = wrapText(g.message, mscale, "chatFont.fnt", gw - 22.f * sc, &wrappedH);
+            auto const& wrapped = g.wrapped;
             float gh = giftCardHeight(g);
             O.gift->setContentSize({ gw, gh });
 
@@ -2033,7 +2069,13 @@ namespace streamui {
             std::deque<TtsJob> queue;
             std::atomic<bool> running{ false };
             std::atomic<int> remaining{ 0 };
-            std::thread worker;
+            // One worker for the life of the process, started on demand. This used to be a
+            // std::thread member that was detached straight after being created, so joinable()
+            // went back to false and every tick started *another* thread: 60 threads a second,
+            // each one waiting on the same condition variable forever. That is the slowdown that
+            // got worse the longer a level ran. `alive` is the flag that actually says "there is
+            // a thread"; it is only ever set from the game thread.
+            bool alive = false;
             std::atomic<bool> quit{ false };
             std::string engineName = "none";
         };
@@ -2068,12 +2110,14 @@ namespace streamui {
         }
 
         void ensureWorker() {
-            if (gTts.worker.joinable()) {
+            // `alive`, not joinable(): the worker is detached, so joinable() is false the moment
+            // the thread is made and this test never stopped anyone. See TtsState above.
+            if (gTts.alive) {
                 return;
             }
+            gTts.alive = true;
             gTts.quit = false;
-            gTts.worker = std::thread(ttsWorkerLoop);
-            gTts.worker.detach();
+            std::thread(ttsWorkerLoop).detach();
         }
 
         void ttsEnqueue(std::string const& user, int amount, std::string const& message, float delay) {
@@ -2293,6 +2337,14 @@ namespace streamui {
                 // spacing jitter: never a metronome
                 gChatTimer = 0.55f + rndf(s) * 0.95f;
             }
+        }
+
+        // Events only drain inside the chat clock above, so with the chat switched off every
+        // death and every completion piled its lines into the queue and nothing ever took them
+        // out. They are dropped rather than kept for a chat that isn't on screen.
+        if (!S.chat) {
+            gEvents.clear();
+            gBurst = 0.f;
         }
 
         healRows(dt);
