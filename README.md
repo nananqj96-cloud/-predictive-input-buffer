@@ -7,6 +7,25 @@ One switch (Settings → **Black Hole UI**, or the Geode setting of the same nam
 
 ![Black Hole UI](docs/black-hole-ui-preview.png)
 
+## Stream overlay (new in v3.3)
+A new **Stream** tab turns the game into a streamer's layout. Everything on screen reacts to your real run, and every part has its own switch.
+
+**Chat.** A Twitch-style chat panel: coloured usernames, mod / VIP / sub / founder icons next to the names, timestamps, smooth wrapping and scrolling. The message pool is generated at startup and has **5,200+ distinct lines** across ten categories (chatting, reactions, spam, emotes, predictions, hype, panic, celebrations, death reactions, personal bests). Picking a line uses a shuffle bag: you see a category's lines in a different order each time, so nothing visibly repeats. The audience grows with your run: quiet chat at 0-10%, encouragement from 10%, hype from 50%, a wall of `GO` and `LOCK IN CHAT` from 85%, and a full celebration at the end.
+
+**People.** `Chat Participants` picks how many unique accounts type (10 to 5,000), independently of `Messages Per Second` (very slow to extreme, or any rate from 0.2 to 60). Every bot has its own colour, icon, writing style (calm, all caps, stretched words, emote-heavy) and talkativeness. Custom bots: name, colour, icon, how often they speak and their own message list; they persist between sessions in `stream-bots.txt`.
+
+**Monitors.** A BPM pill with a pixel heart and a live ECG trace, on the right. The rate climbs with your percentage (about 78 at 0% up to 205+ at 99%) but it moves the way a real watch does: irregular jumps of 3-7, uneven sampling intervals, small dips, and a slow settle on a restart instead of a snap.
+
+**Alerts.** Donations appear on the middle right: username, amount (`$5` to `$1,000`, small amounts common and big ones rare), message and a draining progress bar. **1,350+ built-in donation messages**, plus your own (they can use `$P` for the percentage and `$A` for the attempt). Optional read-aloud on macOS and iOS in a worker thread, so the game never stutters; alerts queue up and never talk over each other.
+
+**Viewers** is its own counter with minimum / maximum / exact / randomised modes and gradual drift, always inside the range you set.
+
+**The overlay shows no feature labels.** It reads like a normal stream: `12,450` next to a red live dot, not "Fake Viewers". Only the settings pages use those words.
+
+Moving it: pick a corner in the Stream tab, or choose `Custom Position` and drag the panel in game (the dots in its bottom-right corner resize it). A small `menu` chip sits on the overlay to open this window without the menu key.
+
+Note: the chat, the viewers, the donations and the heartbeat are all simulated for looks. Nothing is sent anywhere and no money is involved.
+
 ## Keys
 6 cycle stage | 7 menu | F8 copy the console log | F9 open/close the in-game console | F10 path view | F11 forget this level's memory
 
@@ -108,3 +127,4 @@ Practice use only; do not use for verified or leaderboard runs.
 - v3.1.0: the global brain's run comes first (over any macro you have; then your Macros folder, then Hyperbolus), the log says why there's no run for you (another TPS or another version of the level), and a Forget Macro button in the autoplay panel.
 - v3.2 (FrameWave): the mod is now called FrameWave (was Click Before Frames); the in-game watermark is a setting and off by default ("FrameWave | stage" in the bottom left when turned on, still hidden in practice mode); autoplay and updates no longer need the game linked to Discord (the link is only for the site's stats page).
 - v3.2.1: Black Hole UI (experimental, off by default): a whole-window theme with an accretion disk, photon ring, polar jet, orbiting stars and infalling sparks, smoked-glass panels and a violet halo.
+- v3.3.0: the Stream overlay: chat with 5,200+ generated lines and custom bots, a viewer counter, donation alerts with 1,350+ messages (optional read-aloud on macOS/iOS), a heart-rate monitor that reacts to your run, and drag / resize positioning. Every piece is switched on its own and shows no feature labels on screen.

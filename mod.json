@@ -6,12 +6,58 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v3.2.1",
+	"version": "v3.3.0",
 	"id": "basu.input-buffer",
 	"name": "FrameWave",
 	"developer": "BASU",
 	"description": "Trajectory-based input buffer: delays early clicks/releases by up to 8+ frames, with orb, pad and portal-aware prediction. github.com/raresdalas1009/-predictive-input-buffer",
 	"settings": {
+		"stream-chat": {
+			"type": "bool",
+			"name": "Stream: chat overlay",
+			"description": "Show the chat panel on top of the level. Its own page in the menu (Stream tab) has the rest.",
+			"default": true
+		},
+		"stream-viewers": {
+			"type": "bool",
+			"name": "Stream: viewer counter",
+			"description": "Show the live viewer count next to the chat.",
+			"default": true
+		},
+		"stream-gifts": {
+			"type": "bool",
+			"name": "Stream: donation alerts",
+			"description": "Show donation alerts on the middle right of the screen. All of them are simulated: no money moves.",
+			"default": true
+		},
+		"stream-heart": {
+			"type": "bool",
+			"name": "Stream: heart rate monitor",
+			"description": "Show the BPM monitor on the right. The numbers react to your real percentage.",
+			"default": true
+		},
+		"stream-tts": {
+			"type": "bool",
+			"name": "Stream: read donations out loud",
+			"description": "Speak each donation alert on macOS and iOS (a worker thread, so gameplay never freezes). Silent on Windows and Android.",
+			"default": false
+		},
+		"stream-participants": {
+			"type": "int",
+			"name": "Stream: chat participants",
+			"description": "How many different accounts type in chat (1-5000).",
+			"default": 100,
+			"min": 1,
+			"max": 5000
+		},
+		"stream-speed": {
+			"type": "float",
+			"name": "Stream: messages per second",
+			"description": "How fast the chat moves at a normal moment; exciting parts of a run speed it up.",
+			"default": 6.0,
+			"min": 0.2,
+			"max": 60.0
+		},
 		"custom-ticks": {
 			"type": "int",
 			"name": "Custom stage: max delay (ticks)",
@@ -424,7 +470,10 @@
 			"name": "Autoplay Label",
 			"description": "The AUTOPLAY label is always on screen while autoplay plays, so a recording can't pass as a real run. Big: at the top. Small: a small see-through label in the bottom corner, for showcases.",
 			"default": "Big",
-			"one-of": ["Big", "Small"]
+			"one-of": [
+				"Big",
+				"Small"
+			]
 		},
 		"global-brain": {
 			"type": "bool",
