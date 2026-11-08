@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v3.2.0",
+	"version": "v3.2.1",
 	"id": "basu.input-buffer",
 	"name": "FrameWave",
 	"developer": "BASU",
@@ -405,6 +405,12 @@
 			"type": "bool",
 			"name": "Show Autoplay Trail",
 			"description": "Draws the path autoplay plans (and its inputs) on the level. Off for clean showcase recordings; autoplay plays the same either way.",
+			"default": false
+		},
+		"black-hole-ui": {
+			"type": "bool",
+			"name": "Black Hole UI (experimental)",
+			"description": "Changes the whole window: a black hole with a lensed accretion disk that slowly turns, a rotating event horizon, the star field bending into it, and a deep-space glass look. Everything else works the same.",
 			"default": false
 		},
 		"watermark": {

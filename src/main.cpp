@@ -9387,10 +9387,23 @@ public:
         return { m(a.r, b.r), m(a.g, b.g), m(a.b, b.b) };
     }
 
+    // v3.2 black hole UI: every accent is pulled to a hot gold, so the disk, the switches and the
+    // highlights all belong to the same object
+    static bool blackHole() {
+        return Mod::get()->getSettingValue<bool>("black-hole-ui");
+    }
+
     // the accent colour picked in the menu (the old "Menu theme" setting is no longer used)
     static Theme currentTheme() {
         auto a = accentColor();
-        return { a, mix(a, { 255, 255, 255 }, 0.6f), mix(a, { 255, 255, 255 }, 0.4f), mix(a, { 255, 255, 255 }, 0.5f), "GJ_button_02.png" };
+        auto t = Theme { a, mix(a, { 255, 255, 255 }, 0.6f), mix(a, { 255, 255, 255 }, 0.4f), mix(a, { 255, 255, 255 }, 0.5f), "GJ_button_02.png" };
+        if (blackHole()) {
+            t.main = { 255, 196, 122 };
+            t.soft = { 255, 226, 184 };
+            t.accent = { 255, 150, 92 };
+            t.bg = { 3, 2, 7 };
+        }
+        return t;
     }
 
 private:
@@ -9429,6 +9442,8 @@ private:
     bool m_dragging = false;
     float m_shootTimer = 2.f;
     CCNode* m_sky = nullptr;
+    CCPoint m_hole { 0.f, 0.f };   // v3.2: the black hole's centre, for the sparks that fall in
+    float m_sparkTimer = 0.f;
     // test 66: the online count in the footer
     CCLabelBMFont* m_onlineLabel = nullptr;
     CCDrawNode* m_onlineDot = nullptr;
@@ -9481,6 +9496,48 @@ private:
         d->drawPolygon(pts.data(), static_cast<unsigned>(pts.size()), fill, border, borderColor);
     }
 
+    // ---------- v3.2 black hole: the drawing behind the experimental UI ----------
+
+    // the thin photon ring that makes a black hole readable as one
+    static void drawPhotonRing(CCDrawNode* d, CCPoint c, float r, GLubyte alpha) {
+        for (int i = 0; i < 64; ++i) {
+            float a0 = i * 2.f * 3.14159265f / 64.f;
+            float a1 = (i + 1) * 2.f * 3.14159265f / 64.f;
+            float f = alpha / 255.f;
+            d->drawSegment({ c.x + r * std::cos(a0), c.y + r * std::sin(a0) }, { c.x + r * std::cos(a1), c.y + r * std::sin(a1) }, 1.3f,
+                { f, 0.88f * f, 0.66f * f, f });  // premultiplied, like col()
+        }
+    }
+
+    // the accretion disk: three bands of hot gas, bright on one side (the side falling towards
+    // you) and eaten away where the hole is in front of it. `stretch` squashes it into an ellipse.
+    static void drawDisk(CCDrawNode* d, CCPoint c, float inner, float outer, float stretch, int seed, GLubyte alpha = 255, float from = 0.f,
+        float to = 6.2831853f) {
+        struct Band {
+            float in, out;
+            ccColor3B color;
+            float a;
+        };
+        Band bands[] = { { inner, inner + (outer - inner) * 0.46f, { 255, 248, 226 }, 1.f },
+            { inner + (outer - inner) * 0.18f, inner + (outer - inner) * 0.76f, { 255, 168, 92 }, 0.88f },
+            { inner + (outer - inner) * 0.42f, outer, { 228, 88, 52 }, 0.62f } };
+        for (auto const& b : bands) {
+            int steps = 96;
+            for (int i = 0; i < steps; ++i) {
+                float a0 = from + (to - from) * static_cast<float>(i) / steps;
+                float a1 = from + (to - from) * static_cast<float>(i + 1) / steps;
+                float mid = (a0 + a1) * 0.5f;
+                // bright on the left (approaching) side, dim on the right
+                float k = 0.36f + 0.64f * (0.5f - 0.5f * std::cos(mid - 0.6f));
+                k *= 0.82f + 0.18f * std::sin(static_cast<float>(seed) * 0.7f + mid * 5.f);
+                auto p = [&](float a) { return CCPoint { c.x + b.out * std::cos(a), c.y + stretch * b.out * std::sin(a) }; };
+                float alpha2 = alpha * b.a * k / 255.f;
+                d->drawSegment(p(a0), p(a1), b.out - b.in, { b.color.r / 255.f * alpha2, b.color.g / 255.f * alpha2, b.color.b / 255.f * alpha2,
+                    alpha2 });
+            }
+        }
+    }
+
     static char const* bodyFont() {
         return "exo2.fnt"_spr;
     }
@@ -9503,7 +9560,18 @@ private:
     }
 
     ccColor4F cardFill() const {
+        if (blackHole()) {
+            return col({ 10, 7, 26 }, 0.58f);  // glass: text stays readable, the disk still glows at the edges
+        }
         return m_light ? col({ 255, 255, 255 }, 0.55f) : col({ 255, 255, 255 }, 0.045f);
+    }
+
+    // the fill of a single setting row
+    ccColor4F rowFill() const {
+        if (blackHole()) {
+            return col({ 8, 5, 20 }, 0.52f);
+        }
+        return m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f);
     }
 
     // a pill button: filled with the accent (primary), or glassy with an accent edge
@@ -9581,7 +9649,7 @@ private:
     // a setting row: name (and a grey line under it) on the left, switch on the right
     void optionRow(Option const& o, float x, float y, float width, float rowH) {
         auto* d0 = CCDrawNode::create();
-        roundRect(d0, { x, y - rowH / 2.f + 1.f, width, rowH - 2.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+        roundRect(d0, { x, y - rowH / 2.f + 1.f, width, rowH - 2.f }, 6.f, rowFill(), 0.4f,
             col(m_t.main, 0.25f));
         m_page->addChild(d0, 1);
         CCDrawNode* d = nullptr;
@@ -9606,6 +9674,11 @@ private:
     void card(CCRect r, std::string const& title = "", std::string const& right = "") {
         auto* d = CCDrawNode::create();
         roundRect(d, r, 9.f, cardFill(), 0.6f, col(m_t.main, m_light ? 0.45f : 0.35f));
+        if (blackHole()) {
+            // the rim catches the disk's light
+            roundRect(d, { r.getMinX() + 1.f, r.getMinY() + 1.f, r.size.width - 2.f, r.size.height - 2.f }, 8.5f, { 0, 0, 0, 0 }, 0.4f,
+                col(m_t.soft, 0.16f));
+        }
         m_page->addChild(d, 1);
         if (!title.empty()) {
             label(m_page, title, 0.5f, m_text, { r.getMinX() + 9.f, r.getMaxY() - 10.f }, { 0.f, 0.5f });
@@ -9671,6 +9744,101 @@ private:
 
     // ---------- the window ----------
 
+    // v3.2 black hole UI (experimental): stars orbiting the hole, a lensed accretion disk in three
+    // cross-fading phases (so it looks like turning gas without the ellipse tumbling), the photon
+    // ring and the event horizon, with the near side of the disk passing in front of the hole.
+    void buildBlackHole(CCNode* clip) {
+        CCPoint hole { W * 0.63f, H * 0.43f };
+        m_hole = hole;
+        uint32_t seed = 987654321u;
+        auto rnd = [&seed] {
+            seed = seed * 1103515245u + 12345u;
+            return static_cast<float>((seed >> 8) & 0xffff) / 65535.f;
+        };
+
+        // the wash of light the disk throws on the window
+        auto* wash = CCDrawNode::create();
+        for (int i = 9; i >= 1; --i) {
+            circle(wash, { 0.f, 0.f }, 24.f + i * 17.f, { 0.30f * 0.045f * i, 0.12f * 0.045f * i, 0.34f * 0.045f * i, 0.045f * i }, 56);
+        }
+        wash->setPosition(hole);
+        clip->addChild(wash);
+
+        // the star field, turning slowly around the hole (near stars faster)
+        for (int layer = 0; layer < 2; ++layer) {
+            auto* field = CCNode::create();
+            field->setPosition(hole);
+            clip->addChild(field);
+            field->runAction(CCRepeatForever::create(CCRotateBy::create(layer == 0 ? 150.f : 90.f, layer == 0 ? 360.f : -360.f)));
+            int count = layer == 0 ? 130 : 55;
+            float spread = layer == 0 ? 260.f : 150.f;
+            for (int i = 0; i < count; ++i) {
+                float size = layer == 0 ? 0.5f + rnd() * 0.5f : 0.9f + rnd() * 0.9f;
+                auto* star = CCLayerColor::create({ 255, 255, 255, 255 }, size, size);
+                float ang = rnd() * 6.2831853f;
+                float far = 40.f + rnd() * spread;
+                star->setPosition({ far * std::cos(ang), far * std::sin(ang) * 0.8f });
+                float r = rnd();
+                star->setColor(r < 0.18f ? ccColor3B { 196, 180, 255 } : r < 0.34f ? ccColor3B { 255, 216, 186 } : ccColor3B { 255, 255, 255 });
+                GLubyte hi = static_cast<GLubyte>((layer == 0 ? 90 : 150) + rnd() * 100);
+                GLubyte lo = static_cast<GLubyte>(10 + rnd() * 40);
+                star->setOpacity(hi);
+                float t = 0.8f + rnd() * 2.6f;
+                star->runAction(CCRepeatForever::create(CCSequence::create(CCDelayTime::create(rnd() * 3.f), CCFadeTo::create(t, lo),
+                    CCFadeTo::create(t, hi), nullptr)));
+                field->addChild(star);
+            }
+        }
+
+        // the faint polar jet (the beams real black holes throw out), before the disk
+        auto* jet = CCDrawNode::create();
+        for (int dir = 0; dir < 2; ++dir) {
+            float sign = dir == 0 ? 1.f : -1.f;
+            for (int i = 0; i < 22; ++i) {
+                float y0 = sign * (26.f + i * 5.2f), y1 = sign * (26.f + (i + 1) * 5.2f);
+                float wdt = (3.f + i * 0.55f) * 2.f;
+                float fade = 0.055f * (1.f - i / 22.f);
+                jet->drawSegment({ 0.f, y0 }, { 0.f, y1 }, wdt, { 0.55f * fade, 0.45f * fade, 1.f * fade, fade });
+            }
+        }
+        jet->setPosition(hole);
+        clip->addChild(jet);
+
+        // the far side of the disk
+        auto* back = CCDrawNode::create();
+        drawDisk(back, { 0.f, 0.f }, 33.f, 116.f, 0.33f, 7, 245);
+        back->setPosition(hole);
+        clip->addChild(back, 1);
+        back->runAction(CCRepeatForever::create(CCSequence::create(CCFadeTo::create(2.6f, 210), CCFadeTo::create(2.6f, 255), nullptr)));
+        // two more phases, cross-fading, so the gas looks like it is streaming round
+        for (int i = 0; i < 2; ++i) {
+            auto* phase = CCDrawNode::create();
+            drawDisk(phase, { 0.f, 0.f }, 35.f, 116.f, 0.33f, 23 + i * 18, 200);
+            phase->setPosition(hole);
+            phase->setOpacity(0);
+            clip->addChild(phase, 1);
+            phase->runAction(CCRepeatForever::create(CCSequence::create(CCDelayTime::create(i * 1.5f), CCFadeTo::create(2.2f, 210),
+                CCFadeTo::create(2.2f, 0), CCDelayTime::create(1.1f), nullptr)));
+        }
+
+        // the horizon: black, rimmed by the photon ring
+        auto* horizon = CCDrawNode::create();
+        for (int i = 6; i >= 1; --i) {
+            circle(horizon, { 0.f, 0.f }, 36.f + i * 4.5f, { 0.55f * 0.06f * i, 0.26f * 0.06f * i, 0.62f * 0.06f * i, 0.06f * i }, 48);
+        }
+        circle(horizon, { 0.f, 0.f }, 36.f, { 0.f, 0.f, 0.f, 1.f }, 56);
+        drawPhotonRing(horizon, { 0.f, 0.f }, 37.8f, 255);
+        drawPhotonRing(horizon, { 0.f, 0.f }, 40.4f, 110);
+        horizon->setPosition(hole);
+        clip->addChild(horizon, 3);
+
+        // the near side of the disk, in front of the hole
+        auto* front = CCDrawNode::create();
+        drawDisk(front, { 0.f, 0.f }, 40.f, 112.f, 0.33f, 41, 175, 3.14159265f, 6.2831853f);
+        front->setPosition(hole);
+        clip->addChild(front, 4);
+    }
+
     void buildFrame() {
         if (m_frame) {
             m_frame->removeFromParent();
@@ -9692,6 +9860,11 @@ private:
         m_frame->addChild(clip, -2);
         ccColor3B back = BACKS[std::clamp(m_bg, 0, static_cast<int>(std::size(BACKS)) - 1)];
         GLubyte a = static_cast<GLubyte>(253 * opacity);
+        // v3.2 black hole UI: deep space, a lensed accretion disk and the event horizon
+        auto const BH = blackHole();
+        if (BH) {
+            back = { 3, 2, 7 };
+        }
         CCLayerGradient* sky = nullptr;
         if (m_light) {
             ccColor3B lo = mix({ 214, 208, 234 }, bright(back), 0.25f);
@@ -9708,7 +9881,7 @@ private:
             seed = seed * 1103515245u + 12345u;
             return static_cast<float>((seed >> 8) & 0xffff) / 65535.f;
         };
-        if (!m_light) {
+        if (!m_light && !BH) {
             // stars, drifting slowly, twinkling
             for (int layer = 0; layer < 2; ++layer) {
                 auto* field = CCNode::create();
@@ -9734,19 +9907,35 @@ private:
                 }
             }
         }
-        // a big soft accent orb behind the content, like a planet glow
-        auto* orb = CCDrawNode::create();
-        for (int i = 10; i >= 1; --i) {
-            circle(orb, { W * 0.62f, H * 0.42f }, 18.f * i, col(m_t.main, m_light ? 0.012f : 0.018f), 48);
+        if (BH) {
+            buildBlackHole(clip);
         }
-        clip->addChild(orb);
+        else {
+            // a big soft accent orb behind the content, like a planet glow
+            auto* orb = CCDrawNode::create();
+            for (int i = 10; i >= 1; --i) {
+                circle(orb, { W * 0.62f, H * 0.42f }, 18.f * i, col(m_t.main, m_light ? 0.012f : 0.018f), 48);
+            }
+            clip->addChild(orb);
+        }
         m_sky = clip;
 
         // the sidebar panel, the outer edge, the header line, the footer line
         auto* chrome = CCDrawNode::create();
-        roundRect(chrome, { 0.f, 0.f, W, H }, 14.f, { 0, 0, 0, 0 }, 0.8f, col(m_t.main, 0.8f));
-        roundRect(chrome, { 6.f, 6.f, SIDE - 8.f, H - 12.f }, 11.f, m_light ? col({ 255, 255, 255 }, 0.45f) : col({ 0, 0, 0 }, 0.3f), 0.6f,
-            col(m_t.main, 0.35f));
+        if (BH) {
+            // a violet halo around the window (light bent around the hole) and glass panels
+            for (int i = 4; i >= 1; --i) {
+                roundRect(chrome, { -i * 1.6f, -i * 1.6f, W + i * 3.2f, H + i * 3.2f }, 14.f + i * 1.6f, { 0.42f * 0.05f * i, 0.2f * 0.05f * i, 0.9f * 0.05f * i,
+                    0.05f * i });
+            }
+            roundRect(chrome, { 0.f, 0.f, W, H }, 14.f, { 0, 0, 0, 0 }, 0.9f, col(m_t.main, 0.75f));
+            roundRect(chrome, { 6.f, 6.f, SIDE - 8.f, H - 12.f }, 11.f, col({ 6, 4, 16 }, 0.55f), 0.6f, col({ 150, 110, 255 }, 0.45f));
+        }
+        else {
+            roundRect(chrome, { 0.f, 0.f, W, H }, 14.f, { 0, 0, 0, 0 }, 0.8f, col(m_t.main, 0.8f));
+            roundRect(chrome, { 6.f, 6.f, SIDE - 8.f, H - 12.f }, 11.f, m_light ? col({ 255, 255, 255 }, 0.45f) : col({ 0, 0, 0 }, 0.3f), 0.6f,
+                col(m_t.main, 0.35f));
+        }
         m_frame->addChild(chrome, -1);
         auto* line = CCLayerGradient::create({ m_t.main.r, m_t.main.g, m_t.main.b, 230 }, { m_t.soft.r, m_t.soft.g, m_t.soft.b, 40 }, { 1.f, 0.f });
         line->setContentSize({ W - SIDE - 14.f, 1.5f });
@@ -9814,15 +10003,22 @@ private:
             item->setPosition({ SIDE / 2.f + 1.f, 112.f });
             m_frameMenu->addChild(item);
         }
-        label(m_frame, "Accent", 0.36f, m_muted, { 20.f, 97.f }, { 0.f, 0.5f });
-        label(m_frame, "Background", 0.36f, m_muted, { 20.f, 64.f }, { 0.f, 0.5f });
-        int accent = Mod::get()->getSavedValue<int>("ui-accent", 0);
-        float step = (SIDE - 40.f) / 6.f;
-        for (int i = 0; i < 7; ++i) {
-            bool custom = i == 6;
-            ccColor3B c = custom ? hueColor(Mod::get()->getSavedValue<int>("ui-accent-hue", 262)) : ACCENTS[i];
-            dot({ 22.f + i * step, 84.f }, c, accent == i, custom, menu_selector(BufferMenu::onAccent), i);
-            dot({ 22.f + i * step, 51.f }, bright(BACKS[i]), m_bg == i, false, menu_selector(BufferMenu::onBack), i);
+        if (blackHole()) {
+            // v3.2: the hole picks its own accent and background; the colour dots would fight it
+            label(m_frame, "Black hole  ·  deep space", 0.33f, m_t.main, { SIDE / 2.f + 1.f, 82.f });
+            label(m_frame, "fixed look", 0.3f, m_muted, { SIDE / 2.f + 1.f, 69.f });
+        }
+        else {
+            label(m_frame, "Accent", 0.36f, m_muted, { 20.f, 97.f }, { 0.f, 0.5f });
+            label(m_frame, "Background", 0.36f, m_muted, { 20.f, 64.f }, { 0.f, 0.5f });
+            int accent = Mod::get()->getSavedValue<int>("ui-accent", 0);
+            float step = (SIDE - 40.f) / 6.f;
+            for (int i = 0; i < 7; ++i) {
+                bool custom = i == 6;
+                ccColor3B c = custom ? hueColor(Mod::get()->getSavedValue<int>("ui-accent-hue", 262)) : ACCENTS[i];
+                dot({ 22.f + i * step, 84.f }, c, accent == i, custom, menu_selector(BufferMenu::onAccent), i);
+                dot({ 22.f + i * step, 51.f }, bright(BACKS[i]), m_bg == i, false, menu_selector(BufferMenu::onBack), i);
+            }
         }
 
         // header: the stage chip and the close button; footer: the hint and the settings gear
@@ -10114,7 +10310,7 @@ private:
         {
             float y = top - 136.f;
             auto* d0 = CCDrawNode::create();
-            roundRect(d0, { rx + 5.f, y - 11.f, colW - 10.f, 22.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { rx + 5.f, y - 11.f, colW - 10.f, 22.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
             m_page->addChild(d0, 1);
             bool on = Mod::get()->getSavedValue<bool>("autoplay-takeover", false);
@@ -10215,14 +10411,27 @@ private:
         float x = contentX(), w = contentW(), top = contentTop();
         button(m_pageMenu, "Done", menu_selector(BufferMenu::onDone), { W - 98.f - 30.f, H - HEAD / 2.f }, 50.f, true, 0, 16.f);
         float colW = (w - 6.f) / 2.f;
-        // window + helpers (left)
-        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Window");
-        float y = top - 28.f;
+        // v3.2: appearance first (the experimental black hole UI lives here)
+        bool bh = blackHole();
+        float apH = 40.f;
+        card({ x, top - apH, colW, apH }, "Black Hole UI", "experimental");
         {
             auto* d0 = CCDrawNode::create();
             m_page->addChild(d0, 1);
             CCDrawNode* sw = nullptr;
-            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { x + 5.f, top - 33.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f, col(m_t.main, 0.25f));
+            label(m_page, "Whole window", 0.42f, bh ? m_cyan : m_muted, { x + 12.f, top - 24.f }, { 0.f, 0.5f });
+            switchItem({ x + colW - 23.f, top - 24.f }, bh, menu_selector(BufferMenu::onBlackHole), 0, &sw);
+        }
+        // window + helpers (left)
+        float cardTop = top - apH - 6.f;
+        card({ x, FOOT + 6.f, colW, cardTop - FOOT - 6.f }, "Window");
+        float y = cardTop - 22.f;
+        {
+            auto* d0 = CCDrawNode::create();
+            m_page->addChild(d0, 1);
+            CCDrawNode* sw = nullptr;
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
             label(m_page, "Pause Menu Button", 0.46f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
             switchItem({ x + colW - 23.f, y }, Mod::get()->getSavedValue<bool>("pause-button", true), menu_selector(BufferMenu::onPauseButton), 0, &sw);
@@ -10233,7 +10442,7 @@ private:
             auto* d0 = CCDrawNode::create();
             m_page->addChild(d0, 1);
             CCDrawNode* sw = nullptr;
-            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
             label(m_page, "In-Game Watermark", 0.46f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
             switchItem({ x + colW - 23.f, y }, Mod::get()->getSettingValue<bool>("watermark"), menu_selector(BufferMenu::onWatermark), 0, &sw);
@@ -10241,7 +10450,7 @@ private:
         }
         auto row = [&](char const* name) {
             auto* d0 = CCDrawNode::create();
-            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
             m_page->addChild(d0, 1);
             label(m_page, name, 0.48f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
@@ -10481,7 +10690,17 @@ private:
         m_t = currentTheme();
         m_light = Mod::get()->getSavedValue<bool>("ui-light", false);
         m_bg = Mod::get()->getSavedValue<int>("ui-bg", 0);
-        if (m_light) {
+        if (blackHole()) {
+            // the black hole is its own look: always deep space, whatever the light/dark pill says
+            m_light = false;
+            m_bg = 0;
+        }
+        if (blackHole()) {
+            m_text = { 244, 240, 255 };
+            m_muted = { 160, 152, 200 };
+            m_cyan = { 255, 214, 160 };
+        }
+        else if (m_light) {
             m_text = { 34, 28, 56 };
             m_muted = { 105, 100, 135 };
             m_cyan = { 40, 120, 200 };
@@ -10524,8 +10743,22 @@ private:
                 rebuildPage();  // test 91: the account page shows what just came in
             }
         }
+        // v3.2 black hole UI: sparks that spiral into the hole
+        m_sparkTimer -= dt;
+        if (blackHole() && m_sky && m_sparkTimer <= 0.f) {
+            m_sparkTimer = 0.16f + static_cast<float>(std::rand() % 40) / 100.f;
+            // a pivot on the hole; the spark is a child of it, so turning the pivot spirals the spark in
+            auto* turn = CCNode::create();
+            turn->setPosition(m_hole);
+            m_sky->addChild(turn, 2);
+            auto* spark = CCLayerColor::create({ 255, 236, 200, 255 }, 1.4f, 1.4f);
+            spark->setPosition({ 120.f + static_cast<float>(std::rand() % 90), static_cast<float>(std::rand() % 70) - 35.f });
+            turn->addChild(spark);
+            turn->runAction(CCSequence::create(CCRotateBy::create(1.7f, -200.f), CCRemoveSelf::create(), nullptr));
+            spark->runAction(CCSequence::create(CCSpawn::create(CCScaleTo::create(1.7f, 0.1f), CCFadeOut::create(1.7f), nullptr), nullptr));
+        }
         m_shootTimer -= dt;
-        if (m_shootTimer <= 0.f && m_sky && !m_light) {
+        if (m_shootTimer <= 0.f && m_sky && !m_light && !blackHole()) {
             m_shootTimer = 3.5f + static_cast<float>(std::rand() % 400) / 100.f;
             auto* streak = CCLayerGradient::create({ 255, 255, 255, 0 }, { 255, 255, 255, 220 }, { 1.f, 0.f });
             streak->setContentSize({ 34.f, 1.2f });
@@ -10660,6 +10893,14 @@ private:
         Mod::get()->setSavedValue("pause-button", on);
         say("pause menu button {}", on ? "on" : "off (open the menu with its key)");
         rebuildPage();
+    }
+
+    // v3.2: the experimental black hole UI (the whole window, not just the background)
+    void onBlackHole(CCObject*) {
+        bool on = !Mod::get()->getSettingValue<bool>("black-hole-ui");
+        Mod::get()->setSettingValue<bool>("black-hole-ui", on);
+        say("black hole UI {}", on ? "on (experimental)" : "off");
+        wipe();
     }
 
     // v3.2: the in-game watermark ("FrameWave | stage" in the bottom left), off by default

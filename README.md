@@ -2,6 +2,11 @@
 
 Formerly "Click Before Frames" (CBF). Same mod, new name: the in-game watermark is gone by default, and autoplay / updates no longer need the Discord link.
 
+## Black Hole UI (experimental, off by default)
+One switch (Settings → **Black Hole UI**, or the Geode setting of the same name) turns the whole window into deep space: a black hole with a photon ring, a lensed accretion disk that slowly streams round, a faint polar jet, the star field orbiting it, and sparks that spiral in. The window edge gets a violet halo, the panels turn to smoked glass, and the accent colour becomes the disk's gold. Everything else works exactly the same. Light mode, accent and background pickers are ignored while it's on (the hole has its own look).
+
+![Black Hole UI](docs/black-hole-ui-preview.png)
+
 ## Keys
 6 cycle stage | 7 menu | F8 copy the console log | F9 open/close the in-game console | F10 path view | F11 forget this level's memory
 
@@ -102,3 +107,4 @@ Practice use only; do not use for verified or leaderboard runs.
 - v3.0.1: the autoplay trail is hidden by default (setting: Show Autoplay Trail), and the AUTOPLAY label can be small and see-through in the bottom corner for showcases (setting: Autoplay Label).
 - v3.1.0: the global brain's run comes first (over any macro you have; then your Macros folder, then Hyperbolus), the log says why there's no run for you (another TPS or another version of the level), and a Forget Macro button in the autoplay panel.
 - v3.2 (FrameWave): the mod is now called FrameWave (was Click Before Frames); the in-game watermark is a setting and off by default ("FrameWave | stage" in the bottom left when turned on, still hidden in practice mode); autoplay and updates no longer need the game linked to Discord (the link is only for the site's stats page).
+- v3.2.1: Black Hole UI (experimental, off by default): a whole-window theme with an accretion disk, photon ring, polar jet, orbiting stars and infalling sparks, smoked-glass panels and a violet halo.
