@@ -10538,9 +10538,10 @@ private:
         menu->setPosition({ 0.f, 0.f });
         m_tabsNode->addChild(menu);
         for (int i = 0; i < static_cast<int>(std::size(TABS)); ++i) {
-            // v3.3: six tabs, so the column is tighter (it still clears the theme box)
-            float th = 18.f;
-            float y = H - 62.f - i * 18.5f;
+            // v3.3: six tabs, so the column is tighter: the first still clears the logo rule above it
+            // and the last still clears the theme box below
+            float th = 16.f;
+            float y = H - 66.f - i * 16.8f;
             bool active = i == s_tab || (s_tab >= TAB_TUNING && i == s_back);
             float tw = SIDE - 22.f;
             auto* node = CCNode::create();
@@ -12807,14 +12808,15 @@ class $modify(BufPlayLayer, PlayLayer) {
     // taken unless the touch lands on the chat panel, its corner grip or the small menu chip, so
     // clicking to jump is untouched.
     bool ccTouchBegan(CCTouch* touch, CCEvent* event) {
-        if (!buf.simulating && stream::touchDown(touch->getLocation())) {
+        // (the overlay only takes touches that land on the chat panel, the corner grip or the chip)
+        if (!buf.simulating && touch && stream::touchDown(touch->getLocation())) {
             return true;
         }
         return PlayLayer::ccTouchBegan(touch, event);
     }
 
     void ccTouchMoved(CCTouch* touch, CCEvent* event) {
-        if (stream::dragging()) {
+        if (stream::dragging() && touch) {
             stream::touchMove(touch->getLocation());
             return;
         }

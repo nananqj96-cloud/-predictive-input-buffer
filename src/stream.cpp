@@ -395,12 +395,17 @@ namespace stream {
 
         // cocos2d's drawCircle takes (center, radius, angle, segments, colour, borderWidth, borderColour);
         // these two wrappers keep the call sites readable
+        // drawCircle(centre, radius, fill, borderWidth, borderColour, segments)
         void circleFill(CCDrawNode* d, CCPoint at, float r, ccColor4F fill, unsigned seg = 18) {
-            d->drawCircle(at, r, 0.f, seg, fill, 0.f, fill);
+            d->drawCircle(at, r, fill, 0.f, fill, seg);
         }
 
         void circleRing(CCDrawNode* d, CCPoint at, float r, ccColor4F fill, float width, ccColor4F ring, unsigned seg = 18) {
-            d->drawCircle(at, r, 0.f, seg, fill, width, ring);
+            d->drawCircle(at, r, fill, width, ring, seg);
+        }
+
+        void rectFill(CCDrawNode* d, CCRect r, ccColor4F fill) {
+            d->drawRect(r, fill, 0.f, fill);
         }
 
 
@@ -434,19 +439,21 @@ namespace stream {
                 d->drawSegment({ r.origin.x + rr, r.getMaxY() }, { r.getMaxX() - rr, r.getMaxY() }, border, borderColor);
                 d->drawSegment({ r.origin.x, r.origin.y + rr }, { r.origin.x, r.getMaxY() - rr }, border, borderColor);
                 d->drawSegment({ r.getMaxX(), r.origin.y + rr }, { r.getMaxX(), r.getMaxY() - rr }, border, borderColor);
-                constexpr int SEG = 5;
+                // the real arcs, not straight corners: an 8-segment approximation per corner
+                constexpr int SEG = 6;
                 for (int c = 0; c < 4; ++c) {
-                    float cx = c == 0 || c == 3 ? r.origin.x + rr : r.getMaxX() - rr;
-                    float cy = c == 0 || c == 1 ? r.origin.y + rr : r.getMaxY() - rr;
-                    float base = c == 0 ? 180.f : c == 1 ? 270.f : c == 2 ? 0.f : 90.f;
+                    float cx = (c == 0 || c == 3) ? r.origin.x + rr : r.getMaxX() - rr;
+                    float cy = (c == 0 || c == 1) ? r.origin.y + rr : r.getMaxY() - rr;
+                    // quadrant centres at 180/270/90/0 degrees
+                    float base = (c == 0) ? 180.f : (c == 1) ? 270.f : (c == 2) ? 90.f : 0.f;
                     CCPoint prev{};
                     for (int i = 0; i <= SEG; ++i) {
                         float a = (base + 90.f * static_cast<float>(i) / SEG) * 3.14159265f / 180.f;
-                        CCPoint p{ cx + rr * std::cos(a), cy + rr * std::sin(a) };
+                        CCPoint cur{ cx + rr * std::cos(a), cy + rr * std::sin(a) };
                         if (i) {
-                            d->drawSegment(prev, p, border, borderColor);
+                            d->drawSegment(prev, cur, border, borderColor);
                         }
-                        prev = p;
+                        prev = cur;
                     }
                 }
             }
@@ -585,6 +592,7 @@ namespace stream {
             std::deque<Gift> gifts;
             Gift activeGift;
             bool giftBusy = false;
+            bool giftLeaving = false;
             float giftGap = 12.f;
 
             float lineH = 12.f;
@@ -976,7 +984,7 @@ namespace stream {
                     { 1.f, 1.f, 1.f, 0.05f * a }, 0.f);
                 O.chatBg->drawSegment({ 8.f, r.size.height - headH - 2.f }, { r.size.width - 8.f, r.size.height - headH - 2.f },
                     0.5f, { 1.f, 1.f, 1.f, 0.10f * a });
-                O.chatBg->drawRect({ 1.f, 1.f, r.size.width - 2.f, r.size.height - 2.f }, { 1.f, 1.f, 1.f, 0.07f * a });
+                rectFill(O.chatBg, { 1.f, 1.f, r.size.width - 2.f, r.size.height - 2.f }, { 1.f, 1.f, 1.f, 0.07f * a });
             }
 
             // viewer pill, top-right of the panel (or alone in the corner when chat is off)
@@ -1424,17 +1432,19 @@ namespace stream {
             g.queued = false;
             O.activeGift = g;
             O.giftBusy = true;
+            O.giftLeaving = false;
             if (S.tts) {
                 ttsEnqueue(g.user, g.amount, g.message, S.ttsDelay);
             }
             O.gift->setVisible(true);
-            O.gift->setOpacity(0);
+            O.gift->setScale(0.86f);
+            // in from the right edge, with a small overshoot, like the alert tools people use
+            float winW = CCDirector::get()->getWinSize().width;
+            O.gift->setPosition({ winW, O.gift->getPositionY() });
+            float homeX = winW - 250.f * S.scale - 12.f;
+            auto slide = CCEaseExponentialOut::create(CCMoveTo::create(0.34f, CCPoint { homeX, O.gift->getPositionY() }));
             O.gift->stopAllActions();
-            float baseW = 250.f * S.scale;
-            O.gift->setScale(0.9f);
-            O.gift->setPositionX(CCDirector::get()->getWinSize().width);
-            O.gift->runAction(CCEaseBackOut::create(CCScaleTo::create(0.28f, 1.f)));
-            O.gift->runAction(CCEaseExponentialOut::create(CCFadeTo::create(0.22f, 255)));
+            O.gift->runAction(CCSpawn::create(slide, CCEaseBackOut::create(CCScaleTo::create(0.34f, 1.f)), nullptr));
         }
 
         void paintGift() {
@@ -1453,7 +1463,7 @@ namespace stream {
             // the pink progress bar along the top, like the alerts people actually use
             float remain = std::clamp(1.f - g.t / g.life, 0.f, 1.f);
             O.giftBar->clear();
-            O.giftBar->drawRect({ 3.f, gh - 5.f * S.scale, (gw - 6.f) * remain, 3.f * S.scale },
+            rectFill(O.giftBar, { 3.f, gh - 5.f * S.scale, (gw - 6.f) * remain, 3.f * S.scale },
                 { 0.85f, 0.19f, 0.55f, 0.95f });
 
             O.giftName->setScale(0.62f * S.scale);
@@ -1508,12 +1518,17 @@ namespace stream {
                 O.activeGift.t += dt;
                 paintGift();
                 // slide out at the end
-                if (O.activeGift.t > O.activeGift.life - 0.35f && O.gift->getOpacity() > 10) {
+                if (O.activeGift.t > O.activeGift.life - 0.4f && !O.giftLeaving) {
+                    O.giftLeaving = true;
+                    float winW = CCDirector::get()->getWinSize().width;
                     O.gift->stopAllActions();
-                    O.gift->runAction(CCEaseExponentialIn::create(CCFadeTo::create(0.32f, 0)));
+                    O.gift->runAction(CCSpawn::create(
+                        CCEaseExponentialIn::create(CCMoveTo::create(0.36f, CCPoint { winW, O.gift->getPositionY() })),
+                        CCScaleTo::create(0.36f, 0.9f), nullptr));
                 }
                 if (O.activeGift.t > O.activeGift.life) {
                     O.giftBusy = false;
+                    O.giftLeaving = false;
                     O.gift->setVisible(false);
                     O.giftGap = 10.f + rndf(gSeed) * 14.f;
                 }
@@ -2170,7 +2185,7 @@ namespace stream {
         // the panel itself
         if (S.chat && world.x >= r.origin.x && world.x <= r.getMaxX() && world.y >= r.origin.y && world.y <= r.getMaxY()) {
             gDragging = true;
-            gGrabOffset = { world.x - r.origin.x, world.y - r.origin.y };
+            gGrabOffset = CCPoint { world.x - r.origin.x, world.y - r.origin.y };
             return true;
         }
         return false;
