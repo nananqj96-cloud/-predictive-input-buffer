@@ -1050,29 +1050,48 @@ namespace streamui {
                 }
             }
 
-            // heart monitor: right edge of the screen, vertically where the reference puts it
+            // The heart monitor and the donation alert both want the right edge, and the chat panel
+            // may be sitting there too. They're placed so the three never overlap: the monitor sits
+            // at the screen's vertical middle, the alert under it, and if the chat panel is in the
+            // way they move to the left of it.
+            float heartW = 132.f * S.scale;
+            float heartH = 32.f * S.scale;
+            float heartX = win.width - heartW - 14.f;
+            float heartY = win.height * 0.56f;
+            if (chatVisible && heartX < r.getMaxX() + 6.f && heartX + heartW > r.origin.x - 6.f &&
+                heartY < r.getMaxY() + 6.f && heartY + heartH > r.origin.y - 6.f) {
+                heartX = r.origin.x - heartW - 10.f;   // to the left of the panel
+                if (heartX < 6.f) {
+                    heartY = std::max(6.f, r.getMinY() - heartH - 8.f);  // else just under it
+                    heartX = win.width - heartW - 14.f;
+                }
+            }
             if (O.heart) {
                 O.heart->setVisible(S.heart);
                 if (S.heart) {
-                    float h = 32.f * S.scale;
-                    float w = 132.f * S.scale;
-                    float x = win.width - w - 14.f;
-                    float y = win.height * 0.58f;
-                    // at the top-right of a level the progress bar lives; keep clear of it
-                    if (S.pos == 0 || S.pos == 1) {
-                        y = win.height * 0.42f;
-                    }
-                    O.heart->setPosition({ x, y });
-                    O.heart->setContentSize({ w, h });
+                    O.heart->setPosition({ heartX, heartY });
+                    O.heart->setContentSize({ heartW, heartH });
                 }
             }
 
-            // donation alert: middle-right of the screen
+            // donation alert: under the monitor, still on the right half
             if (O.gift) {
-                float gw = 250.f * S.scale;
-                float gh = 84.f * S.scale;
+                float gw = 260.f * S.scale;
+                float gh = 92.f * S.scale;
+                float gx = std::clamp(heartX + heartW - gw, 6.f, std::max(6.f, win.width - gw - 6.f));
+                float gy = heartY - gh - 26.f;
+                if (chatVisible && gx < r.getMaxX() + 6.f && gx + gw > r.origin.x - 6.f && gy < r.getMaxY() + 6.f &&
+                    gy + gh > r.origin.y - 6.f) {
+                    // put it on the other side of the panel instead of over it
+                    gx = r.origin.x - gw - 10.f;
+                    if (gx < 6.f) {
+                        gx = 6.f;
+                        gy = std::max(6.f, r.getMinY() - gh - 8.f);
+                    }
+                }
+                gy = std::clamp(gy, 6.f, std::max(6.f, win.height - gh - 6.f));
                 O.gift->setContentSize({ gw, gh });
-                O.gift->setPosition({ win.width - gw - 12.f, win.height * 0.44f });
+                O.gift->setPosition({ gx, gy });
             }
 
             if (O.grip) {
@@ -1490,62 +1509,70 @@ namespace streamui {
                 return;
             }
             auto const& g = O.activeGift;
-            float gw = 250.f * S.scale;
-            float gh = 84.f * S.scale;
+            float sc = S.scale;
+            float gw = 260.f * sc;
+            float gh = 92.f * sc;
+
+            // the message first: the card grows a line when the message needs one
+            float mscale = 0.56f * sc;
+            float mlh = lineHeight(mscale, "chatFont.fnt");
+            float wrappedH = 0.f;
+            auto wrapped = wrapText(g.message, mscale, "chatFont.fnt", gw - 22.f * sc, &wrappedH);
+            bool twoLines = wrappedH > 1.5f;
+            if (twoLines) {
+                gh += mlh;
+            }
             O.gift->setContentSize({ gw, gh });
 
+            // ---- card: dark glass, a pink top bar that drains like an alert timer
             O.giftBg->clear();
-            // card
-            roundRect(O.giftBg, { 0.f, 0.f, gw, gh }, 7.f * S.scale, { 0.05f, 0.026f, 0.09f, 0.96f },
-                std::max(1.f, 1.3f * S.scale), { 1.f, 1.f, 1.f, 0.85f });
-            // the pink progress bar along the top, like the alerts people actually use
+            roundRect(O.giftBg, { 0.f, 0.f, gw, gh }, 7.f * sc, { 0.055f, 0.03f, 0.10f, 0.95f },
+                std::max(1.f, 1.2f * sc), { 1.f, 1.f, 1.f, 0.30f });
+            // a soft top highlight so it reads as a raised card
+            rectFill(O.giftBg, { 8.f * sc, gh - 1.6f * sc, gw - 16.f * sc, 1.2f * sc }, { 1.f, 1.f, 1.f, 0.18f });
             float remain = std::clamp(1.f - g.t / g.life, 0.f, 1.f);
             O.giftBar->clear();
-            rectFill(O.giftBar, { 3.f, gh - 5.f * S.scale, (gw - 6.f) * remain, 3.f * S.scale },
-                { 0.85f, 0.19f, 0.55f, 0.95f });
+            rectFill(O.giftBar, { 0.f, gh - 5.f * sc, gw * remain, 5.f * sc }, { 0.87f, 0.20f, 0.55f, 0.95f });
 
-            O.giftName->setScale(0.62f * S.scale);
+            // ---- name (its chat colour) with its badge, then "donated" and the amount
+            float pad = 11.f * sc;
+            float row1 = gh - 19.f * sc;
+            O.giftName->setScale(0.62f * sc);
             O.giftName->setColor(g.color);
-            O.giftName->setString((g.user + " ").c_str());
-            O.giftName->setPosition({ 10.f * S.scale, gh - 15.f * S.scale });
-            float nx = 10.f * S.scale + textW(g.user + " ", 0.62f * S.scale, "chatFont.fnt");
+            O.giftName->setString(g.user.c_str());
+            O.giftName->setPosition({ pad, row1 });
+            float nx = pad + textW(g.user, 0.62f * sc, "chatFont.fnt") + 4.f * sc;
+            if (g.badge > 0) {
+                pixelBadge(O.giftBg, g.badge, { nx, row1 - 3.2f * sc }, 0.9f * sc);
+                nx += 9.f * sc;
+            }
 
-            int bAmt = 0;
-            // "donated $100" under the name, with the amount big
-            char const* verb = "donated";
-            auto* verbLabel = O.giftFoot;   // reused: the small line under the amount
-            float ax = nx;
-            // dollar + amount: goldFont so it reads as the headline
+            O.giftFoot->setScale(0.42f * sc);
+            O.giftFoot->setColor({ 186.f / 255.f, 176.f / 255.f, 208.f / 255.f, 1.f });
+            O.giftFoot->setString("DONATED");
+            O.giftFoot->setPosition({ nx, row1 });
+            float ax = nx + textW("DONATED ", 0.42f * sc, "chatFont.fnt");
+
             std::string amt = "$" + number(g.amount);
-            O.giftAmount->setScale(0.72f * S.scale);
+            O.giftAmount->setScale(0.78f * sc);
             O.giftAmount->setColor({ 255, 214, 92 });
             O.giftAmount->setString(amt.c_str());
-            O.giftAmount->setPosition({ ax, gh - 24.f * S.scale });
-            (void)verbLabel;
-            (void)verb;
-            (void)bAmt;
+            O.giftAmount->setPosition({ ax, row1 });
 
-            // message, wrapped to two lines
-            float scale = 0.58f * S.scale;
-            float lh = lineHeight(scale, "chatFont.fnt");
-            float linesH = 0.f;
-            auto wrapped = wrapText(g.message, scale, "chatFont.fnt", gw - 20.f * S.scale, &linesH);
+            // ---- the message, under the name line
+            float my = row1 - (18.f * sc);
             for (int i = 0; i < 2; ++i) {
                 if (i < static_cast<int>(wrapped.size())) {
                     O.giftMsg[i]->setString(wrapped[static_cast<size_t>(i)].c_str());
-                    O.giftMsg[i]->setScale(scale);
-                    O.giftMsg[i]->setColor({ 232, 232, 242 });
-                    O.giftMsg[i]->setPosition({ 10.f * S.scale, gh - 40.f * S.scale - static_cast<float>(i) * lh });
+                    O.giftMsg[i]->setScale(mscale);
+                    O.giftMsg[i]->setColor({ 233, 233, 243 });
+                    O.giftMsg[i]->setPosition({ pad, my - static_cast<float>(i) * mlh });
                     O.giftMsg[i]->setVisible(true);
                 }
                 else {
                     O.giftMsg[i]->setVisible(false);
                 }
             }
-            O.giftFoot->setString("DONATION");
-            O.giftFoot->setScale(0.44f * S.scale);
-            O.giftFoot->setColor({ 178, 168, 200 });
-            O.giftFoot->setPosition({ 10.f * S.scale, 9.f * S.scale });
         }
 
         void updateGifts(float dt) {
