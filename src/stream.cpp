@@ -1548,7 +1548,7 @@ namespace streamui {
             }
 
             O.giftFoot->setScale(0.42f * sc);
-            O.giftFoot->setColor({ 186.f / 255.f, 176.f / 255.f, 208.f / 255.f, 1.f });
+            O.giftFoot->setColor({ 186, 176, 208 });
             O.giftFoot->setString("DONATED");
             O.giftFoot->setPosition({ nx, row1 });
             float ax = nx + textW("DONATED ", 0.42f * sc, "chatFont.fnt");
