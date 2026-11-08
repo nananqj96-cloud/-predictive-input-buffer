@@ -10812,6 +10812,26 @@ private:
         rebuildPage();
     }
 
+    void onStreamEcg(CCObject*) {
+        Mod::get()->setSavedValue("stream-ecg", !Mod::get()->getSavedValue<bool>("stream-ecg", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamHeader(CCObject*) {
+        Mod::get()->setSavedValue("stream-header", !Mod::get()->getSavedValue<bool>("stream-header", false));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamSpread(CCObject* sender) {
+        int v = Mod::get()->getSavedValue<int>("stream-vspread", 120) + (sender->getTag() > 0 ? 40 : -40);
+        v = std::clamp(v, 20, 400);
+        Mod::get()->setSavedValue("stream-vspread", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
     void onStreamChip(CCObject*) {
         Mod::get()->setSavedValue("stream-chip", !Mod::get()->getSavedValue<bool>("stream-chip", true));
         streamui::refresh();
@@ -11139,6 +11159,8 @@ private:
         toggleRow("Donations", "donation alerts on the right", Mod::get()->getSavedValue<bool>("stream-gifts", true), menu_selector(BufferMenu::onStreamGifts));
         toggleRow("Heart Rate", "the BPM monitor", Mod::get()->getSavedValue<bool>("stream-heart", true), menu_selector(BufferMenu::onStreamHeart));
         toggleRow("Timestamps", "the clock before each name", Mod::get()->getSavedValue<bool>("stream-timestamps", true), menu_selector(BufferMenu::onStreamTimestamps));
+        toggleRow("BPM Trace", "the cyan line beside the monitor", Mod::get()->getSavedValue<bool>("stream-ecg", true), menu_selector(BufferMenu::onStreamEcg));
+        toggleRow("GdStream Title", "the wordmark above the chat", Mod::get()->getSavedValue<bool>("stream-header", false), menu_selector(BufferMenu::onStreamHeader));
         toggleRow("Menu Button", "the small \"menu\" handle on the overlay", Mod::get()->getSavedValue<bool>("stream-chip", true), menu_selector(BufferMenu::onStreamChip));
 
         y -= 4.f;
@@ -11265,8 +11287,18 @@ private:
         valueRow("Minimum", Mod::get()->getSavedValue<int>("stream-vmin", 800), 0);
         valueRow("Maximum", Mod::get()->getSavedValue<int>("stream-vmax", 2400), 1);
         valueRow("Exact", Mod::get()->getSavedValue<int>("stream-vexact", 0), 2);
-        label(m_page, "The shown count never leaves the minimum/maximum range.",
-            0.27f, m_muted, { x + 10.f, vy + 4.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.27f, 0.15f);
+        {
+            int sp = Mod::get()->getSavedValue<int>("stream-vspread", 120);
+            label(m_page, "Movement", 0.38f, m_text, { x + 10.f, vy }, { 0.f, 0.5f });
+            label(m_page, fmt::format("{}%", sp), 0.38f, m_cyan, { x + colW - 52.f, vy }, { 1.f, 0.5f });
+            button(m_pageMenu, "-", menu_selector(BufferMenu::onStreamSpread), { x + colW - 92.f, vy }, 15.f, false, -1, 15.f);
+            button(m_pageMenu, "+", menu_selector(BufferMenu::onStreamSpread), { x + colW - 75.f, vy }, 15.f, false, 1, 15.f);
+            vy -= 18.f;
+            label(m_page, "How much the count wanders. It always drifts a little; this decides how far.",
+                0.27f, m_muted, { x + 10.f, vy + 6.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.27f, 0.15f);
+            label(m_page, "The shown count never leaves the minimum/maximum range.",
+                0.27f, m_muted, { x + 10.f, vy - 1.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.27f, 0.15f);
+        }
 
         // ---------------- right: custom bots ----------------
         float rx = x + colW + 6.f;

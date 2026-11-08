@@ -142,6 +142,9 @@ namespace streamui {
             bool ttsMessage = true;
             bool showTime = true;
             bool chip = true;          // the little "menu" handle on the overlay
+            bool ecg = true;           // the cyan trace beside the heart monitor
+            bool header = false;       // "GdStream" above the chat panel
+            int vspread = 120;         // how far the viewer count wanders, as a % of the range
             float scale = 1.f;
         };
 
@@ -175,6 +178,9 @@ namespace streamui {
             S.ttsMessage = m.getSavedValue<bool>("stream-tts-message", true);
             S.showTime = m.getSavedValue<bool>("stream-timestamps", true);
             S.chip = m.getSavedValue<bool>("stream-chip", true);
+            S.ecg = m.getSavedValue<bool>("stream-ecg", true);
+            S.header = m.getSavedValue<bool>("stream-header", false);
+            S.vspread = std::clamp(m.getSavedValue<int>("stream-vspread", 120), 20, 400);
             S.scale = std::clamp(m.getSavedValue<float>("stream-scale", 1.f), 0.6f, 2.2f);
         }
 
@@ -596,6 +602,9 @@ namespace streamui {
                 float w = -1.f, h = -1.f, scale = -1.f, pos = -1.f, chat = -1.f;
             } laidOutFor;
 
+            CCNode* header = nullptr;             // optional "GdStream" wordmark above the panel
+            CCLabelBMFont* headGd = nullptr;
+            CCLabelBMFont* headStream = nullptr;
             CCClippingNode* rowsHost = nullptr;   // clips the chat rows to the panel
             CCDrawNode* rowStencil = nullptr;
             CCNode* chip = nullptr;        // small settings chip, shown while the menu is closed
@@ -619,11 +628,13 @@ namespace streamui {
 
             float lineH = 12.f;
             float bpmShown = 74.f;
-            float bpmReal = 74.f;
+            float bpmReal = 74.f;   // kept in step with bpmShown by heartSpike / the jump timer
             float bpmTimer = 2.f;
             float beatPhase = 0.f;
             float ecgT = 0.f;
             float viewerValue = 0.f;
+            float viewerTarget = 0.f;
+            float viewerNudge = 1.f;
             float viewerTimer = 4.f;
             float chatClock = 0.f;
             std::string lastViewers;
@@ -744,6 +755,33 @@ namespace streamui {
         }
 
         // the bag: every line of a category is used once before any repeats
+        // The panel is only ~300px wide by default, which fits roughly 40 characters on the body
+        // line. In a narrow panel the pool is filtered to lines that fit, so messages are short
+        // instead of being cut with an ellipsis. A wide panel keeps the whole pool.
+        bool lineFits(std::string const& body) {
+            float panelW = O.chat ? O.chat->getContentSize().width : S.width * S.scale;
+            // the row's head is the clock, the badge and a username: a pessimistic 150px, so a line
+            // that survives this test fits behind any name in the pool
+            return textW(body, 0.62f, "chatFont.fnt") <= panelW - 150.f;
+        }
+
+        // the short-line index, built once per category per panel width (measuring every candidate
+        // with the font on every category change would be a stutter)
+        std::vector<int> gShortCache[text::C_COUNT];
+        int gShortWidth = -1;
+
+        void buildShortCache(int cat) {
+            auto const& t = text::chat();
+            gShortCache[cat].clear();
+            int n = t.count(cat);
+            for (int i = 0; i < n; ++i) {
+                int idx = t.first(cat) + i;
+                if (lineFits(fillRun(t.at(idx)))) {
+                    gShortCache[cat].push_back(idx);
+                }
+            }
+        }
+
         int nextLine(uint32_t& s, int cat) {
             auto const& t = text::chat();
             int n = t.count(cat);
@@ -751,9 +789,27 @@ namespace streamui {
                 return 0;
             }
             if (cat != gBagCat || gBagPos >= gBag.size()) {
-                gBag.resize(static_cast<size_t>(n));
-                for (int i = 0; i < n; ++i) {
-                    gBag[static_cast<size_t>(i)] = t.first(cat) + i;
+                float panelW = O.chat ? O.chat->getContentSize().width : S.width * S.scale;
+                bool narrow = panelW < 420.f;
+                int widthKey = static_cast<int>(panelW);
+                if (widthKey != gShortWidth) {
+                    for (auto& c : gShortCache) {
+                        c.clear();
+                    }
+                    gShortWidth = widthKey;
+                }
+                gBag.clear();
+                if (narrow) {
+                    if (gShortCache[cat].empty()) {
+                        buildShortCache(cat);
+                    }
+                    gBag = gShortCache[cat];
+                }
+                if (gBag.empty()) {
+                    // a wide panel, or a category where nothing is short: use all of it
+                    for (int i = 0; i < n; ++i) {
+                        gBag.push_back(t.first(cat) + i);
+                    }
                 }
                 for (size_t i = gBag.size(); i > 1; --i) {
                     std::swap(gBag[i - 1], gBag[rnd32(s) % i]);
@@ -946,6 +1002,19 @@ namespace streamui {
                 O.chip->addChild(l, 1);
             }
 
+            // ---------------- optional wordmark above the panel ----------------
+            // "Gd" in green then "Stream" in gold, in the game's own bitmap font, sat on the panel's
+            // top-left corner. Two labels so each half keeps its colour.
+            O.header = newNode(root, 14);
+            O.headGd = CCLabelBMFont::create("Gd", "bigFont.fnt");
+            O.headGd->setAnchorPoint({ 0.f, 0.5f });
+            O.headGd->setColor({ 88, 214, 92 });
+            O.header->addChild(O.headGd, 0);
+            O.headStream = CCLabelBMFont::create("Stream", "bigFont.fnt");
+            O.headStream->setAnchorPoint({ 0.f, 0.5f });
+            O.headStream->setColor({ 236, 186, 62 });
+            O.header->addChild(O.headStream, 0);
+
             // ---------------- chat rows ----------------
             // One clipping node for the whole stack (not one per row: 110 stencils is a lot of
             // state changes on a phone). A long message is cut at the glass edge instead of running
@@ -1008,8 +1077,15 @@ namespace streamui {
                     break;
             }
             x = std::clamp(x, 2.f, std::max(2.f, win.width - w - 2.f));
-            y = std::clamp(y, 2.f, std::max(2.f, win.height - h - 2.f));
+            // when the wordmark is on, the panel leaves it room instead of pushing it off screen
+            float topPad = S.header && S.chat ? 20.f : 2.f;
+            y = std::clamp(y, 2.f, std::max(2.f, win.height - h - topPad));
             return { x, y, w, h };
+        }
+
+        // the monitor is the trace + the pill, or just the pill when the trace is turned off
+        float heartElemW() {
+            return (S.ecg ? 164.f : 92.f) * S.scale;
         }
 
         void layoutOverlay() {
@@ -1069,7 +1145,7 @@ namespace streamui {
                 return chatVisible && x < r.getMaxX() + 6.f && x + w > r.origin.x - 6.f && y < r.getMaxY() + 6.f &&
                     y + h > r.origin.y - 6.f;
             };
-            float heartW = 164.f * S.scale;   // trace + pill; the trace needs most of it
+            float heartW = heartElemW();   // trace + pill; the trace needs most of it
             float heartH = 32.f * S.scale;
             float heartX = win.width - heartW - 14.f;
             float heartY = win.height - heartH - 56.f;   // clear of the progress bar
@@ -1118,6 +1194,23 @@ namespace streamui {
                 gx = std::clamp(gx, 6.f, std::max(6.f, win.width - gw - 6.f));
                 O.gift->setContentSize({ gw, gh });
                 O.gift->setPosition({ gx, gy });
+            }
+
+            // the wordmark sits just above the panel's top-left; the panel always leaves room for it
+            bool showHead = S.header && chatVisible;
+            if (O.header) {
+                O.header->setVisible(showHead);
+                if (showHead) {
+                    float hsc = 0.34f * std::clamp(S.scale, 0.8f, 1.6f);
+                    O.headGd->setScale(hsc);
+                    O.headStream->setScale(hsc);
+                    float hh = lineHeight(hsc, "bigFont.fnt");
+                    float wGd = textW("Gd", hsc, "bigFont.fnt");
+                    O.headGd->setPosition({ 0.f, hh * 0.5f });
+                    O.headStream->setPosition({ wGd, hh * 0.5f });
+                    O.header->setContentSize({ wGd + textW("Stream", hsc, "bigFont.fnt"), hh });
+                    O.header->setPosition({ r.getMinX() + 2.f, r.getMaxY() + 3.f });
+                }
             }
 
             if (O.grip) {
@@ -1374,36 +1467,41 @@ namespace streamui {
 
             // irregular jumps of 3-7 bpm, with a wandering delay. Never 1 at a time, never a jump
             // from the resting rate to the ceiling.
+            // The readout is an integer that only ever changes by a whole jump, exactly like a real
+            // monitor: 150 then 155, never 151/152/153/154. It used to ease toward a sampled float
+            // every frame, which printed every number in between.
             O.bpmTimer -= dt;
             if (O.bpmTimer <= 0.f) {
                 O.bpmTimer = 0.75f + rndf(gSeed) * 1.6f;
-                float diff = static_cast<float>(target) - O.bpmShown;
-                float step = static_cast<float>(rndInt(gSeed, 3, 7));
-                if (std::abs(diff) < 2.f) {
-                    // hovering at the target: small jitter, still 3+ so it never crawls by one
-                    step = static_cast<float>(rndInt(gSeed, 3, 5)) * (rndf(gSeed) < 0.5f ? -1.f : 1.f);
+                int shown = static_cast<int>(std::lround(O.bpmShown));
+                int diff = target - shown;
+                int mag = rndInt(gSeed, 3, 7);
+                int next = 0;
+                if (std::abs(diff) < 4) {
+                    // hovering at the target: a small wander, still a jump of 3+
+                    int dir = rndf(gSeed) < 0.5f ? -1 : 1;
+                    next = shown + dir * mag;
                 }
                 else {
-                    step *= diff > 0.f ? 1.f : -1.f;
-                    // when the gap is big (a restart), move a bit further per tick than usual
-                    if (std::abs(diff) > 25.f && rndf(gSeed) < 0.35f) {
-                        step *= 1.6f;
+                    int dir = diff > 0 ? 1 : -1;
+                    // a long way to go (a restart) closes in bigger whole jumps
+                    if (std::abs(diff) > 25 && rndf(gSeed) < 0.35f) {
+                        mag = rndInt(gSeed, 9, 14);
                     }
+                    next = shown + dir * std::min(mag, std::abs(diff));
                 }
-                O.bpmReal = std::clamp(O.bpmShown + step, 62.f, 214.f);
-                // calm people read lower than tense people; a tiny bias keeps it from looking fake
-                if (gPct < 5.f && rndf(gSeed) < 0.3f) {
-                    O.bpmReal -= 2.f;
+                next = std::clamp(next, 62, 216);
+                // the step must never be 1 or 2, even when the clamp pulled it in
+                if (std::abs(next - shown) < 3) {
+                    next = std::clamp(shown + (next >= shown ? 3 : -3), 62, 216);
                 }
+                O.bpmShown = static_cast<float>(next);   // a jump, not an interpolation
             }
-            // the displayed number eases toward the sampled one, the way a watch does
-            float k = std::min(1.f, dt * 4.5f);
-            O.bpmShown += (O.bpmReal - O.bpmShown) * k;
 
             // ---- draw the pill
             auto* pill = O.heartPill;
             pill->clear();
-            float w = 164.f * S.scale;
+            float w = heartElemW();
             float h = 32.f * S.scale;
             float pillW = 92.f * S.scale;
             float px = w - pillW;
@@ -1425,11 +1523,12 @@ namespace streamui {
             }
             O.bpmLabel->setPosition({ px + 44.f * S.scale, h * 0.5f + 1.f });
 
-            // ---- the ECG trace to the left of the pill
+            // ---- the ECG trace to the left of the pill (optional: some people want just the pill)
             auto* ecg = O.ecg;
             ecg->clear();
+            O.ecgHead->clear();
             float span = px - 6.f * S.scale;
-            if (span > 20.f) {
+            if (S.ecg && span > 20.f) {
                 float beatsPerSec = O.bpmShown / 60.f;
                 O.ecgT += beatsPerSec;   // one cycle per beat
                 float baseY = h * 0.5f;
@@ -1660,27 +1759,57 @@ namespace streamui {
             float hi = static_cast<float>(std::max(S.viewersMin, S.viewersMax));
             if (S.viewersExact > 0) {
                 O.viewerValue = static_cast<float>(S.viewersExact);
+                O.viewerTarget = O.viewerValue;
             }
             else if (!S.viewersRandom) {
                 O.viewerValue = lo;
+                O.viewerTarget = lo;
             }
             else {
+                // A viewer count only ever exists as a target plus a lag toward it. The old code
+                // re-rolled the target every 2.5-8.5s and also dragged the value toward a *new*
+                // random number every single frame, so the two fought and the number parked itself.
+                // Now the target wanders up and down on its own timer and the value follows it.
                 if (O.viewerValue <= 0.f) {
-                    O.viewerValue = lo + (hi - lo) * bell(gSeed);
+                    O.viewerTarget = lo + (hi - lo) * bell(gSeed);
+                    O.viewerValue = O.viewerTarget;
+                }
+                if (O.viewerTarget <= 0.f) {
+                    O.viewerTarget = O.viewerValue;
                 }
                 O.viewerTimer -= dt;
                 if (O.viewerTimer <= 0.f) {
-                    O.viewerTimer = 2.5f + rndf(gSeed) * 6.f;
-                    float t = S.viewersGradual ? lo + (hi - lo) * bell(gSeed) : rndInt(gSeed, static_cast<int>(lo), static_cast<int>(hi));
-                    // a run going well pulls people in
-                    t *= 1.f + std::clamp(gPct, 0.f, 100.f) / 100.f * 0.25f;
-                    if (!S.viewersGradual) {
-                        O.viewerValue = std::clamp(t, lo, hi);
+                    O.viewerTimer = 1.6f + rndf(gSeed) * 5.2f;
+                    float range = std::max(1.f, hi - lo);
+                    float spread = static_cast<float>(S.vspread) / 100.f;
+                    // a run going well slowly pulls the whole audience up
+                    float centre = (lo + hi) * 0.5f + range * 0.18f * (std::clamp(gPct, 0.f, 100.f) / 100.f - 0.5f);
+                    float newTarget = 0.f;
+                    if (S.viewersGradual) {
+                        // a real drift: step away from where it is, not a fresh dice roll
+                        float drift = range * 0.06f * spread * (rndf(gSeed) * 2.f - 1.f);
+                        if (rndf(gSeed) < 0.12f) {
+                            drift *= 3.5f;   // now and then somebody raids or a chunk leaves
+                        }
+                        newTarget = O.viewerTarget + drift;
+                        // and a gentle pull back toward the middle so it can't stick to a wall
+                        newTarget += (centre - newTarget) * 0.18f;
                     }
+                    else {
+                        newTarget = lo + range * spread * bell(gSeed);
+                    }
+                    O.viewerTarget = std::clamp(newTarget, lo, hi);
                 }
-                if (S.viewersGradual) {
-                    float target = std::clamp(lo + (hi - lo) * bell(gSeed), lo, hi);
-                    O.viewerValue += (target - O.viewerValue) * std::min(1.f, dt * 0.35f);
+                float k = std::min(1.f, dt * (S.viewersGradual ? 0.9f : 3.f));
+                O.viewerValue += (O.viewerTarget - O.viewerValue) * k;
+                // never a still number: a few viewers always come or go, and the nudge is applied
+                // to the drift target too so the lag can't just undo it
+                O.viewerNudge -= dt;
+                if (O.viewerNudge <= 0.f) {
+                    O.viewerNudge = 0.6f + rndf(gSeed) * 1.5f;
+                    float n = (rndf(gSeed) < 0.5f ? -1.f : 1.f) * static_cast<float>(rndInt(gSeed, 1, 5));
+                    O.viewerTarget = std::clamp(O.viewerTarget + n, lo, hi);
+                    O.viewerValue = std::clamp(O.viewerValue + n, lo, hi);
                 }
             }
             O.viewerValue = std::clamp(O.viewerValue, lo, hi);
@@ -1688,17 +1817,18 @@ namespace streamui {
             if (text != O.lastViewers) {
                 O.lastViewers = text;
                 O.viewersLabel->setString(text.c_str());
-                float pw = 22.f + textW(text, 0.6f, "chatFont.fnt");
-                O.viewers->setContentSize({ pw, 15.f });
+                float pw = 19.f + textW(text, 0.6f, "chatFont.fnt");
+                float ph = 14.f;
+                O.viewers->setContentSize({ pw, ph });
                 O.viewersBg->clear();
-                roundRect(O.viewersBg, { 0.f, 0.f, pw, 15.f }, 7.5f, { 0.08f, 0.05f, 0.12f, 0.85f }, 0.6f,
-                    { 1.f, 1.f, 1.f, 0.16f });
+                roundRect(O.viewersBg, { 0.f, 0.f, pw, ph }, ph / 2.f, { 0.06f, 0.04f, 0.10f, 0.72f }, 0.f);
                 O.viewersIcon->clear();
-                circleFill(O.viewersIcon, { 8.f, 7.5f }, 2.4f, { 0.92f, 0.15f, 0.22f, 1.f }, 10);
-                // keep the pill where the layout wants it
+                circleFill(O.viewersIcon, { 7.f, ph / 2.f }, 2.2f, { 0.92f, 0.15f, 0.22f, 1.f }, 10);
+                O.viewersLabel->setPosition({ 12.5f, ph / 2.f });
+                // keep the pill pinned inside the panel's top-right corner
                 auto r = panelRect();
                 if (S.chat) {
-                    O.viewers->setPosition({ r.getMaxX() - pw - 6.f, r.getMaxY() - 15.5f + 0.5f });
+                    O.viewers->setPosition({ r.getMaxX() - pw - 5.f, r.getMaxY() - ph - 4.f });
                 }
             }
         }
@@ -2237,6 +2367,9 @@ namespace streamui {
         O.giftFoot = nullptr;
         O.rowsHost = nullptr;
         O.rowStencil = nullptr;
+        O.header = nullptr;
+        O.headGd = nullptr;
+        O.headStream = nullptr;
         O.grip = nullptr;
         O.gripDraw = nullptr;
         O.chip = nullptr;
@@ -2296,7 +2429,10 @@ namespace streamui {
     }
 
     void heartSpike() {
-        O.bpmReal = std::min(214.f, O.bpmShown + 22.f);
+        // a scare is a jump as well: 9-14 up, never a crawl
+        int up = rndInt(gSeed, 9, 14);
+        O.bpmShown = static_cast<float>(std::min(216, static_cast<int>(std::lround(O.bpmShown)) + up));
+        O.bpmReal = O.bpmShown;
         O.bpmTimer = 0.f;
     }
 
