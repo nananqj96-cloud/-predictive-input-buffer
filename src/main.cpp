@@ -10812,6 +10812,12 @@ private:
         rebuildPage();
     }
 
+    void onStreamChip(CCObject*) {
+        Mod::get()->setSavedValue("stream-chip", !Mod::get()->getSavedValue<bool>("stream-chip", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
     void onStreamViewers(CCObject*) {
         Mod::get()->setSavedValue("stream-viewers", !Mod::get()->getSavedValue<bool>("stream-viewers", true));
         streamui::refresh();
@@ -11133,6 +11139,7 @@ private:
         toggleRow("Donations", "donation alerts on the right", Mod::get()->getSavedValue<bool>("stream-gifts", true), menu_selector(BufferMenu::onStreamGifts));
         toggleRow("Heart Rate", "the BPM monitor", Mod::get()->getSavedValue<bool>("stream-heart", true), menu_selector(BufferMenu::onStreamHeart));
         toggleRow("Timestamps", "the clock before each name", Mod::get()->getSavedValue<bool>("stream-timestamps", true), menu_selector(BufferMenu::onStreamTimestamps));
+        toggleRow("Menu Button", "the small \"menu\" handle on the overlay", Mod::get()->getSavedValue<bool>("stream-chip", true), menu_selector(BufferMenu::onStreamChip));
 
         y -= 4.f;
         label(m_page, "Position", 0.42f, m_text, { x + 10.f, y }, { 0.f, 0.5f });

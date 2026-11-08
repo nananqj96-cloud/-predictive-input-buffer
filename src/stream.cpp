@@ -141,10 +141,12 @@ namespace streamui {
             float ttsDelay = 1.5f;
             bool ttsMessage = true;
             bool showTime = true;
+            bool chip = true;          // the little "menu" handle on the overlay
             float scale = 1.f;
         };
 
         Settings S;
+        bool gChipRuntime = true;   // the menu hides the chip while its own window is open
 
         void loadSettings() {
             auto& m = *Mod::get();
@@ -172,6 +174,7 @@ namespace streamui {
             S.ttsDelay = std::clamp(m.getSavedValue<float>("stream-tts-delay", 1.5f), 0.f, 15.f);
             S.ttsMessage = m.getSavedValue<bool>("stream-tts-message", true);
             S.showTime = m.getSavedValue<bool>("stream-timestamps", true);
+            S.chip = m.getSavedValue<bool>("stream-chip", true);
             S.scale = std::clamp(m.getSavedValue<float>("stream-scale", 1.f), 0.6f, 2.2f);
         }
 
@@ -433,23 +436,30 @@ namespace streamui {
                 }
             }
             if (border > 0.f) {
-                float rr = std::max(0.5f, rad);
-                // four sides + four corner arcs, drawn as segments
+                float rr = std::min(std::max(0.5f, rad), std::min(r.size.width, r.size.height) / 2.f);
+                if (rr < 1.2f) {
+                    // small boxes: the four straight runs read as a rounded frame on their own
+                    rr = 1.2f;
+                }
+                // four straight runs
                 d->drawSegment({ r.origin.x + rr, r.origin.y }, { r.getMaxX() - rr, r.origin.y }, border, borderColor);
                 d->drawSegment({ r.origin.x + rr, r.getMaxY() }, { r.getMaxX() - rr, r.getMaxY() }, border, borderColor);
                 d->drawSegment({ r.origin.x, r.origin.y + rr }, { r.origin.x, r.getMaxY() - rr }, border, borderColor);
                 d->drawSegment({ r.getMaxX(), r.origin.y + rr }, { r.getMaxX(), r.getMaxY() - rr }, border, borderColor);
-                // the real arcs, not straight corners: an 8-segment approximation per corner
-                constexpr int SEG = 6;
-                for (int c = 0; c < 4; ++c) {
-                    float cx = (c == 0 || c == 3) ? r.origin.x + rr : r.getMaxX() - rr;
-                    float cy = (c == 0 || c == 1) ? r.origin.y + rr : r.getMaxY() - rr;
-                    // quadrant centres at 180/270/90/0 degrees
-                    float base = (c == 0) ? 180.f : (c == 1) ? 270.f : (c == 2) ? 90.f : 0.f;
+                // four quarter arcs, each one sweeping outwards from its own corner centre. The old
+                // version had the bottom-right and top-left sweeps rotated into the box, which is
+                // what drew those stray white hooks over the panel.
+                constexpr int ARC = 8;
+                struct Corner {
+                    float cx, cy, from;
+                };
+                Corner arcs[4] = { { r.origin.x + rr, r.origin.y + rr, 180.f }, { r.getMaxX() - rr, r.origin.y + rr, 270.f },
+                    { r.getMaxX() - rr, r.getMaxY() - rr, 0.f }, { r.origin.x + rr, r.getMaxY() - rr, 90.f } };
+                for (auto const& a : arcs) {
                     CCPoint prev{};
-                    for (int i = 0; i <= SEG; ++i) {
-                        float a = (base + 90.f * static_cast<float>(i) / SEG) * 3.14159265f / 180.f;
-                        CCPoint cur{ cx + rr * std::cos(a), cy + rr * std::sin(a) };
+                    for (int i = 0; i <= ARC; ++i) {
+                        float ang = (a.from + 90.f * static_cast<float>(i) / ARC) * 3.14159265f / 180.f;
+                        CCPoint cur{ a.cx + rr * std::cos(ang), a.cy + rr * std::sin(ang) };
                         if (i) {
                             d->drawSegment(prev, cur, border, borderColor);
                         }
@@ -586,6 +596,8 @@ namespace streamui {
                 float w = -1.f, h = -1.f, scale = -1.f, pos = -1.f, chat = -1.f;
             } laidOutFor;
 
+            CCClippingNode* rowsHost = nullptr;   // clips the chat rows to the panel
+            CCDrawNode* rowStencil = nullptr;
             CCNode* chip = nullptr;        // small settings chip, shown while the menu is closed
             CCDrawNode* chipDraw = nullptr;
             std::function<void()> onChip = nullptr;
@@ -662,6 +674,7 @@ namespace streamui {
         void ttsEnqueue(std::string const& user, int amount, std::string const& message, float delay);
         void buildOverlay();
         void layoutOverlay();
+        float giftCardHeight(Gift const& g);
         void addLine(LineView line);
         void relayoutRows();
         void rewrapAll();
@@ -917,32 +930,35 @@ namespace streamui {
             O.grip = newNode(root, 15);
             O.gripDraw = CCDrawNode::create();
             O.grip->addChild(O.gripDraw, 0);
-            for (int i = 0; i < 3; ++i) {
-                for (int j = 0; j <= i; ++j) {
-                    circleFill(O.gripDraw, { 12.f - i * 3.5f, 3.5f + j * 3.5f }, 1.f, { 1.f, 1.f, 1.f, 0.55f }, 8);
-                }
-            }
+            // The corner handle is still there for resizing, but it draws nothing: a chat overlay
+            // with three white dots in the corner looks like a UI mock, not a stream.
             O.grip->setContentSize({ 16.f, 16.f });
             O.chip = newNode(root, 40);
             O.chipDraw = CCDrawNode::create();
             O.chip->addChild(O.chipDraw, 0);
-            O.chip->setContentSize({ 44.f, 16.f });
-            roundRect(O.chipDraw, { 0.f, 0.f, 44.f, 16.f }, 8.f, { 0.04f, 0.02f, 0.07f, 0.55f }, 0.5f,
-                { 1.f, 1.f, 1.f, 0.18f });
+            O.chip->setContentSize({ 40.f, 14.f });
+            roundRect(O.chipDraw, { 0.f, 0.f, 40.f, 14.f }, 7.f, { 0.04f, 0.02f, 0.07f, 0.55f }, 0.f);
             {
                 auto* l = CCLabelBMFont::create("menu", "chatFont.fnt");
-                l->setScale(0.4f);
-                l->setColor({ 210, 210, 225 });
-                l->setPosition({ 22.f, 8.f });
+                l->setScale(0.36f);
+                l->setColor({ 200, 200, 215, 190 });
+                l->setPosition({ 20.f, 7.f });
                 O.chip->addChild(l, 1);
             }
 
             // ---------------- chat rows ----------------
+            // One clipping node for the whole stack (not one per row: 110 stencils is a lot of
+            // state changes on a phone). A long message is cut at the glass edge instead of running
+            // off the panel and under the viewer pill.
+            O.rowStencil = CCDrawNode::create();
+            O.rowsHost = CCClippingNode::create(O.rowStencil);
+            O.rowsHost->setAlphaThreshold(0.01f);
+            O.chat->addChild(O.rowsHost, 1);
             // 110 rows is more than a 900px panel can show at the smallest font, so a resize
             // never runs out
             O.rows.resize(110);
             for (auto& r : O.rows) {
-                r.node = newNode(O.chat, 1);
+                r.node = newNode(O.rowsHost, 1);
                 r.node->setVisible(false);
                 r.stamp = CCLabelBMFont::create("", "chatFont.fnt");
                 r.stamp->setAnchorPoint({ 0.f, 0.5f });
@@ -976,7 +992,9 @@ namespace streamui {
 
         CCRect panelRect() {
             auto win = CCDirector::get()->getWinSize();
-            float w = S.width * S.scale, h = S.height * S.scale;
+            float w = S.width * S.scale;
+            float h = std::min(S.height * S.scale, std::max(60.f, win.height - 16.f));
+            w = std::min(w, std::max(60.f, win.width - 16.f));
             float m = 12.f;
             float x = 0.f, y = 0.f;
             switch (S.pos) {
@@ -1005,35 +1023,30 @@ namespace streamui {
             O.chat->setPosition(r.origin);
             O.chat->setContentSize(r.size);
 
-            float headH = 16.f;
+            // no header strip: rows start at the very top, only the viewer pill needs a little room
+            float headH = S.viewers ? 19.f : 4.f;
             if (O.headLabel) {
-                O.headLabel->setPosition({ 8.f, r.size.height - headH / 2.f + 1.f });
-                O.headLabel->setColor({ 214, 214, 224 });
+                O.headLabel->setVisible(false);   // a real chat overlay has no title bar
             }
 
-            // the chat background: a soft dark glass with a hairline top light, like the overlay
-            // in the reference screenshots but readable over any level
+            // The panel is a single sheet of glass. There used to be a header band, a hairline
+            // under it and a 1px inset frame on top of this, which read as boxes inside boxes and
+            // ate the top of the panel. One plate, nothing else.
             O.chatBg->clear();
             if (chatVisible) {
-                float a = S.opacity;
-                roundRect(O.chatBg, { 0.f, 0.f, r.size.width, r.size.height }, 8.f,
-                    { 0.043f, 0.027f, 0.078f, 0.72f * a }, 0.f);
-                // a brighter band behind the header
-                roundRect(O.chatBg, { 0.f, r.size.height - headH - 2.f, r.size.width, headH + 2.f }, 8.f,
-                    { 1.f, 1.f, 1.f, 0.05f * a }, 0.f);
-                O.chatBg->drawSegment({ 8.f, r.size.height - headH - 2.f }, { r.size.width - 8.f, r.size.height - headH - 2.f },
-                    0.5f, { 1.f, 1.f, 1.f, 0.10f * a });
-                rectFill(O.chatBg, { 1.f, 1.f, r.size.width - 2.f, r.size.height - 2.f }, { 1.f, 1.f, 1.f, 0.07f * a });
+                float a = std::min(0.46f, 0.06f + 0.34f * S.opacity);
+                roundRect(O.chatBg, { 0.f, 0.f, r.size.width, r.size.height }, 6.f,
+                    { 0.035f, 0.020f, 0.062f, a }, 0.f);
             }
 
             // viewer pill, top-right of the panel (or alone in the corner when chat is off)
             if (O.viewers) {
                 O.viewers->setVisible(S.viewers);
                 if (S.viewers) {
-                    float pw = 66.f, ph = 15.f;
+                    float pw = 62.f, ph = 14.f;
                     O.viewers->setContentSize({ pw, ph });
                     if (chatVisible) {
-                        O.viewers->setPosition({ r.getMaxX() - pw - 6.f, r.getMaxY() - headH + 0.5f });
+                        O.viewers->setPosition({ r.getMaxX() - pw - 5.f, r.getMaxY() - ph - 4.f });
                     }
                     else {
                         auto corner = S.pos == 0 || S.pos == 2 ? CCPoint { 12.f, win.height - ph - 12.f }
@@ -1041,31 +1054,40 @@ namespace streamui {
                         O.viewers->setPosition(corner);
                     }
                     O.viewersBg->clear();
-                    roundRect(O.viewersBg, { 0.f, 0.f, pw, ph }, ph / 2.f, { 0.08f, 0.05f, 0.12f, 0.85f }, 0.6f,
-                        { 1.f, 1.f, 1.f, 0.16f });
+                    roundRect(O.viewersBg, { 0.f, 0.f, pw, ph }, ph / 2.f, { 0.06f, 0.04f, 0.10f, 0.72f }, 0.f);
                     O.viewersIcon->clear();
                     // a tiny red live dot
-                    circleFill(O.viewersIcon, { 8.f, ph / 2.f }, 2.4f, { 0.92f, 0.15f, 0.22f, 1.f }, 10);
-                    O.viewersLabel->setPosition({ 14.f, ph / 2.f });
+                    circleFill(O.viewersIcon, { 7.f, ph / 2.f }, 2.2f, { 0.92f, 0.15f, 0.22f, 1.f }, 10);
+                    O.viewersLabel->setPosition({ 12.5f, ph / 2.f });
                 }
             }
 
-            // The heart monitor and the donation alert both want the right edge, and the chat panel
-            // may be sitting there too. They're placed so the three never overlap: the monitor sits
-            // at the screen's vertical middle, the alert under it, and if the chat panel is in the
-            // way they move to the left of it.
-            float heartW = 132.f * S.scale;
+            // The monitor lives on the right edge, just under the progress bar, and the alert under
+            // it. Both stay glued to the right edge: they only slide vertically to keep clear of the
+            // chat panel (and only cross to its left if the whole edge is taken).
+            auto hits = [&](float x, float y, float w, float h) {
+                return chatVisible && x < r.getMaxX() + 6.f && x + w > r.origin.x - 6.f && y < r.getMaxY() + 6.f &&
+                    y + h > r.origin.y - 6.f;
+            };
+            float heartW = 164.f * S.scale;   // trace + pill; the trace needs most of it
             float heartH = 32.f * S.scale;
             float heartX = win.width - heartW - 14.f;
-            float heartY = win.height * 0.56f;
-            if (chatVisible && heartX < r.getMaxX() + 6.f && heartX + heartW > r.origin.x - 6.f &&
-                heartY < r.getMaxY() + 6.f && heartY + heartH > r.origin.y - 6.f) {
-                heartX = r.origin.x - heartW - 10.f;   // to the left of the panel
-                if (heartX < 6.f) {
-                    heartY = std::max(6.f, r.getMinY() - heartH - 8.f);  // else just under it
-                    heartX = win.width - heartW - 14.f;
+            float heartY = win.height - heartH - 56.f;   // clear of the progress bar
+            if (hits(heartX, heartY, heartW, heartH)) {
+                float below = r.getMinY() - heartH - 10.f;
+                float above = r.getMaxY() + 10.f;
+                if (below >= 6.f) {
+                    heartY = below;                       // under the panel
+                }
+                else if (above + heartH <= win.height - 6.f) {
+                    heartY = above;                       // above it
+                }
+                else {
+                    heartX = r.origin.x - heartW - 10.f;  // no room either way: beside it
                 }
             }
+            heartY = std::clamp(heartY, 6.f, std::max(6.f, win.height - heartH - 6.f));
+            heartX = std::clamp(heartX, 6.f, std::max(6.f, win.width - heartW - 6.f));
             if (O.heart) {
                 O.heart->setVisible(S.heart);
                 if (S.heart) {
@@ -1074,22 +1096,26 @@ namespace streamui {
                 }
             }
 
-            // donation alert: under the monitor, still on the right half
+            // donation alert: the same right edge, under the monitor
             if (O.gift) {
                 float gw = 260.f * S.scale;
-                float gh = 92.f * S.scale;
-                float gx = std::clamp(heartX + heartW - gw, 6.f, std::max(6.f, win.width - gw - 6.f));
-                float gy = heartY - gh - 26.f;
-                if (chatVisible && gx < r.getMaxX() + 6.f && gx + gw > r.origin.x - 6.f && gy < r.getMaxY() + 6.f &&
-                    gy + gh > r.origin.y - 6.f) {
-                    // put it on the other side of the panel instead of over it
-                    gx = r.origin.x - gw - 10.f;
-                    if (gx < 6.f) {
-                        gx = 6.f;
-                        gy = std::max(6.f, r.getMinY() - gh - 8.f);
+                float gh = O.giftBusy ? giftCardHeight(O.activeGift) : 44.f * S.scale;
+                float gx = win.width - gw - 14.f;
+                float gy = heartY - gh - 22.f;
+                if (hits(gx, gy, gw, gh)) {
+                    float below = r.getMinY() - gh - 10.f;
+                    if (below >= 6.f) {
+                        gy = below;
+                    }
+                    else if (r.getMaxY() + 10.f + gh <= win.height - 6.f) {
+                        gy = r.getMaxY() + 10.f;
+                    }
+                    else {
+                        gx = r.origin.x - gw - 10.f;
                     }
                 }
                 gy = std::clamp(gy, 6.f, std::max(6.f, win.height - gh - 6.f));
+                gx = std::clamp(gx, 6.f, std::max(6.f, win.width - gw - 6.f));
                 O.gift->setContentSize({ gw, gh });
                 O.gift->setPosition({ gx, gy });
             }
@@ -1099,10 +1125,11 @@ namespace streamui {
                 O.grip->setPosition({ r.getMaxX() - 17.f, r.getMinY() + 2.f });
             }
             if (O.chip) {
+                O.chip->setVisible(S.chip && gChipRuntime && chatVisible);
                 // directly under the chat panel when there is room, otherwise above it, so it never
                 // sits underneath the panel (z 40 is above the chat's z 10)
-                float cw = 44.f;
-                float chh = 16.f;
+                float cw = 40.f;
+                float chh = 14.f;
                 float below = r.getMinY() - chh - 4.f;
                 float above = r.getMaxY() + 4.f;
                 float x = std::clamp(r.origin.x, 8.f, std::max(8.f, win.width - cw - 8.f));
@@ -1110,6 +1137,11 @@ namespace streamui {
                 O.chip->setPosition({ x, y });
             }
 
+            if (O.rowsHost) {
+                O.rowsHost->setContentSize(r.size);
+                O.rowStencil->clear();
+                rectFill(O.rowStencil, { 0.f, 0.f, r.size.width, r.size.height }, { 1.f, 1.f, 1.f, 1.f });
+            }
             rewrapAll();
             relayoutRows();
         }
@@ -1165,7 +1197,7 @@ namespace streamui {
                 return;
             }
             float width = O.chat->getContentSize().width;
-            float headH = 16.f;
+            float headH = S.viewers ? 19.f : 4.f;
             float top = O.chat->getContentSize().height - headH - 2.f;
             float bottom = 4.f;
             float usable = top - bottom;
@@ -1371,7 +1403,7 @@ namespace streamui {
             // ---- draw the pill
             auto* pill = O.heartPill;
             pill->clear();
-            float w = 132.f * S.scale;
+            float w = 164.f * S.scale;
             float h = 32.f * S.scale;
             float pillW = 92.f * S.scale;
             float px = w - pillW;
@@ -1401,7 +1433,7 @@ namespace streamui {
                 float beatsPerSec = O.bpmShown / 60.f;
                 O.ecgT += beatsPerSec;   // one cycle per beat
                 float baseY = h * 0.5f;
-                float amp = h * 0.34f;
+                float amp = h * 0.42f;
                 int const N = 46;
                 CCPoint prev{};
                 for (int i = 0; i <= N; ++i) {
@@ -1504,6 +1536,19 @@ namespace streamui {
             O.gift->runAction(CCSpawn::create(slide, CCEaseBackOut::create(CCScaleTo::create(0.34f, 1.f)), nullptr));
         }
 
+        // the card is exactly as tall as its content: a name row, up to two message lines, and the
+        // pink timer bar. It used to be a fixed 92px, which left a dead band under short messages.
+        float giftCardHeight(Gift const& g) {
+            float sc = S.scale;
+            float gw = 260.f * sc;
+            float mscale = 0.56f * sc;
+            float mlh = lineHeight(mscale, "chatFont.fnt");
+            float wrappedH = 0.f;
+            wrapText(g.message, mscale, "chatFont.fnt", gw - 22.f * sc, &wrappedH);
+            int n = g.message.empty() ? 0 : (wrappedH > 1.5f ? 2 : 1);
+            return 40.f * sc + mlh * static_cast<float>(n) + (n ? 6.f * sc : 0.f);
+        }
+
         void paintGift() {
             if (!O.giftBusy) {
                 return;
@@ -1511,32 +1556,23 @@ namespace streamui {
             auto const& g = O.activeGift;
             float sc = S.scale;
             float gw = 260.f * sc;
-            float gh = 92.f * sc;
-
-            // the message first: the card grows a line when the message needs one
             float mscale = 0.56f * sc;
             float mlh = lineHeight(mscale, "chatFont.fnt");
             float wrappedH = 0.f;
             auto wrapped = wrapText(g.message, mscale, "chatFont.fnt", gw - 22.f * sc, &wrappedH);
-            bool twoLines = wrappedH > 1.5f;
-            if (twoLines) {
-                gh += mlh;
-            }
+            float gh = giftCardHeight(g);
             O.gift->setContentSize({ gw, gh });
 
-            // ---- card: dark glass, a pink top bar that drains like an alert timer
+            // ---- card: dark glass, no frame; the pink bar on top is the alert's timer
             O.giftBg->clear();
-            roundRect(O.giftBg, { 0.f, 0.f, gw, gh }, 7.f * sc, { 0.055f, 0.03f, 0.10f, 0.95f },
-                std::max(1.f, 1.2f * sc), { 1.f, 1.f, 1.f, 0.30f });
-            // a soft top highlight so it reads as a raised card
-            rectFill(O.giftBg, { 8.f * sc, gh - 1.6f * sc, gw - 16.f * sc, 1.2f * sc }, { 1.f, 1.f, 1.f, 0.18f });
+            roundRect(O.giftBg, { 0.f, 0.f, gw, gh }, 7.f * sc, { 0.055f, 0.03f, 0.10f, 0.95f }, 0.f);
             float remain = std::clamp(1.f - g.t / g.life, 0.f, 1.f);
             O.giftBar->clear();
             rectFill(O.giftBar, { 0.f, gh - 5.f * sc, gw * remain, 5.f * sc }, { 0.87f, 0.20f, 0.55f, 0.95f });
 
             // ---- name (its chat colour) with its badge, then "donated" and the amount
             float pad = 11.f * sc;
-            float row1 = gh - 19.f * sc;
+            float row1 = gh - 17.f * sc;
             O.giftName->setScale(0.62f * sc);
             O.giftName->setColor(g.color);
             O.giftName->setString(g.user.c_str());
@@ -1560,7 +1596,7 @@ namespace streamui {
             O.giftAmount->setPosition({ ax, row1 });
 
             // ---- the message, under the name line
-            float my = row1 - (18.f * sc);
+            float my = row1 - (16.f * sc);
             for (int i = 0; i < 2; ++i) {
                 if (i < static_cast<int>(wrapped.size())) {
                     O.giftMsg[i]->setString(wrapped[static_cast<size_t>(i)].c_str());
@@ -2199,11 +2235,16 @@ namespace streamui {
         O.giftAmount = nullptr;
         O.giftMsg[0] = O.giftMsg[1] = nullptr;
         O.giftFoot = nullptr;
+        O.rowsHost = nullptr;
+        O.rowStencil = nullptr;
+        O.grip = nullptr;
+        O.gripDraw = nullptr;
+        O.chip = nullptr;
+        O.chipDraw = nullptr;
         O.rows.clear();
         O.lines.clear();
         O.gifts.clear();
         O.giftBusy = false;
-        O.chip = nullptr;
         O.lastBpm.clear();
         O.lastViewers.clear();
     }
@@ -2271,8 +2312,9 @@ namespace streamui {
     }
 
     void setChipVisible(bool on) {
+        gChipRuntime = on;
         if (O.chip) {
-            O.chip->setVisible(on);
+            O.chip->setVisible(on && S.chip);
         }
     }
 
@@ -2294,7 +2336,7 @@ namespace streamui {
             }
         }
         // the chip
-        if (O.chip && O.chip->isVisible()) {
+        if (O.chip && O.chip->isVisible() && S.chip && gChipRuntime) {
             auto c = O.chip->getPosition();
             auto sz = O.chip->getContentSize();
             if (world.x >= c.x && world.x <= c.x + sz.width && world.y >= c.y && world.y <= c.y + sz.height) {
