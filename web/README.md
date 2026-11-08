@@ -1,4 +1,4 @@
-# Click Before Frames: online counter + website
+# FrameWave: online counter + website
 
 One Cloudflare Worker does both: the API the mod pings (`/api/ping`), the numbers (`/api/stats`),
 "Log in with Discord" (`/auth/*`) and the website itself (`public/`). Players are stored in a D1

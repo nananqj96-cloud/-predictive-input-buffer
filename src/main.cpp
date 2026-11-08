@@ -1,4 +1,4 @@
-// Click Before Frames v2.9 (cube-style wave, wave auto-release, orb alignment, full ghost state, drift check, in-game console on F9)
+// FrameWave v3.2 (was Click Before Frames) (cube-style wave, wave auto-release, orb alignment, full ghost state, drift check, in-game console on F9)
 //
 // When you click (or release, in wave / robot), a hidden "ghost" player is simulated
 // ahead with your input. If the ghost dies, the input is retried with 1..N ticks of
@@ -298,7 +298,7 @@ namespace {
         bool robotAutoRelease = false;  // v2.12: robot auto-release (practice mode only)
         bool autoNormalRuns = false; // v2.14: let auto-release work outside practice too
         CCLabelBMFont* autoTag = nullptr;  // v2.14: on-screen "AUTO-RELEASE ON" tag
-        CCLabelBMFont* watermark = nullptr;  // v2.46: always-on "Click Before Frames" label while the buffer is on
+        CCLabelBMFont* watermark = nullptr;  // v2.46: "FrameWave | stage" label (setting: In-Game Watermark, off by default)
         bool usedThisAttempt = false;      // v2.46: the buffer was on at some point of this attempt
         bool learn = true;           // v2.13: per-level memory learned from your runs
         bool fullState = true;       // v2.11.1: copy the full v2.8 player state into the ghost
@@ -855,17 +855,18 @@ namespace {
     }
 
     // v2.14: a run outside practice where auto-release can press for you is marked on screen.
-    // v2.46 watermark: whenever the buffer is on (any stage but OFF) the level shows it, and
-    // can't be turned off, so runs made with the mod are recognisable.
+    // v2.46 watermark: whenever the buffer is on (any stage but OFF) the level showed a label.
+    // v3.2: the watermark is a setting now ("In-Game Watermark", off by default) and carries the
+    // mod's name, so a normal run isn't branded; turn it on to show in a recording that the mod was on.
     void refreshWatermark() {
         if (!buf.watermark) {
             return;
         }
         // hidden in practice mode (practice runs can't be submitted, and on phones it sat on the
-        // checkpoint buttons); always shown in normal mode while the buffer is on
+        // checkpoint buttons); otherwise shown while the buffer is on and the setting is on
         auto* layer = GameManager::get()->m_playLayer;
-        buf.watermark->setVisible(buf.enabled && !(layer && layer->m_isPracticeMode));
-        buf.watermark->setString(fmt::format("CBF  |  {}", stageText()).c_str());
+        buf.watermark->setVisible(Mod::get()->getSettingValue<bool>("watermark") && buf.enabled && !(layer && layer->m_isPracticeMode));
+        buf.watermark->setString(fmt::format("FrameWave  |  {}", stageText()).c_str());
     }
 
     void refreshAutoTag() {
@@ -887,7 +888,7 @@ namespace {
         auto* mod = Mod::get();
         auto* layer = GameManager::get()->m_playLayer;
         std::string text;
-        text += fmt::format("Click Before Frames {} console export\n", mod->getVersion().toVString());
+        text += fmt::format("FrameWave {} console export\n", mod->getVersion().toVString());
         if (layer && layer->m_level) {
             text += fmt::format("Level: {} (id {}){}\n", std::string(layer->m_level->m_levelName), layer->m_level->m_levelID.value(),
                 layer->m_isPracticeMode ? ", practice" : "");
@@ -4909,7 +4910,7 @@ namespace {
     // the mod presses / lets go only when keeping the button as it is would crash sooner than
     // switching. The level is put in test mode, so the game saves nothing it plays; your own
     // clicks are ignored while it runs, and AUTOPLAY stays on screen.
-// test 66: online players. Every 90 s (setting "Show Online Players") the game sends the CBF server
+// test 66: online players. Every 90 s (setting "Show Online Players") the game sends the FrameWave server
 // an anonymous random id, its platform and the mod's version, nothing else; the server answers with
 // how many are online and offline, shown in the window's footer. The server's code is in web/.
 namespace online {
@@ -4963,7 +4964,7 @@ namespace online {
                 if (Mod::get()->getSettingValue<bool>("online-players")) {
                     auto res = web::WebRequest()
                         .timeout(std::chrono::seconds(10))
-                        .userAgent("ClickBeforeFrames")
+                        .userAgent("FrameWave")
                         .header("Content-Type", "application/json")
                         .bodyString(body)
                         .postSync(std::string(URL) + "/api/ping");
@@ -4991,7 +4992,7 @@ namespace online {
     }
 }
 
-    // ===== test 91: your account (a game linked to your Discord on the CBF site) =====
+    // ===== test 91: your account (a game linked to your Discord on the FrameWave site; optional since v3.2) =====
     namespace account {
         struct Stats {
             bool loaded = false;
@@ -5006,8 +5007,9 @@ namespace online {
         std::string code;        // the code the browser shows while linking
         std::string status;
 
-        // test 92: autoplay and updates need this game linked to Discord on the CBF site (checked with
-        // the site at start; the last answer is kept for when it can't be reached)
+        // test 92: this game linked to Discord on the FrameWave site (checked with the site at
+        // start; the last answer is kept for when it can't be reached). v3.2: only the site's
+        // stats need it - autoplay and updates no longer do.
         bool isLinked() {
             if (stats.loaded) {
                 return stats.linked;
@@ -5021,7 +5023,7 @@ namespace online {
             }
             std::string url = fmt::format("{}/api/account?id={}", online::URL, online::id());
             std::thread([url] {
-                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("ClickBeforeFrames").getSync(url);
+                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave").getSync(url);
                 Stats st;
                 if (res.ok()) {
                     if (auto j = res.json(); j.isOk()) {
@@ -5047,7 +5049,7 @@ namespace online {
                         Mod::get()->setSavedValue("account-name", st.linked ? st.name : std::string());
                     }
                     else {
-                        status = "Couldn't reach the CBF site.";
+                        status = "Couldn't reach the FrameWave site.";
                     }
                     dirty = true;
                 });
@@ -5061,11 +5063,11 @@ namespace online {
                 return;
             }
             linking = true;
-            status = "Opening the CBF site...";
+            status = "Opening the FrameWave site...";
             dirty = true;
             std::string body = fmt::format(R"({{"id":"{}"}})", online::id());
             std::thread([body] {
-                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("ClickBeforeFrames").header("Content-Type", "application/json")
+                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave").header("Content-Type", "application/json")
                     .bodyString(body).postSync(std::string(online::URL) + "/api/link/start");
                 std::string c, url;
                 if (res.ok()) {
@@ -5077,7 +5079,7 @@ namespace online {
                 if (c.empty()) {
                     queueInMainThread([] {
                         linking = false;
-                        status = "Couldn't reach the CBF site.";
+                        status = "Couldn't reach the FrameWave site.";
                         dirty = true;
                     });
                     return;
@@ -5090,7 +5092,7 @@ namespace online {
                 });
                 for (int i = 0; i < 200; ++i) {
                     std::this_thread::sleep_for(std::chrono::seconds(3));
-                    auto p = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("ClickBeforeFrames")
+                    auto p = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("FrameWave")
                         .getSync(fmt::format("{}/api/link/poll?code={}", online::URL, c));
                     if (!p.ok()) {
                         continue;
@@ -5106,7 +5108,7 @@ namespace online {
                             linking = false;
                             code.clear();
                             status = "Linked to " + name + ".";
-                            say("account: this game is linked to {} on the CBF site", name);
+                            say("account: this game is linked to {} on the FrameWave site", name);
                             refresh();
                         });
                         return;
@@ -5838,7 +5840,7 @@ namespace online {
 
     // the page's data: <script data-page="app" type="application/json">{...}</script>
     std::optional<matjson::Value> hyperbolusPage(std::string const& url) {
-        auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("ClickBeforeFrames").getSync(url);
+        auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("FrameWave").getSync(url);
         if (!res.ok()) {
             return std::nullopt;
         }
@@ -5876,7 +5878,7 @@ namespace online {
             for (int page = 1; page <= std::min(last, 8); ++page) {
                 // test 71: Hyperbolus's own API (the level page's data before)
                 std::optional<matjson::Value> data;
-                auto api = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("ClickBeforeFrames")
+                auto api = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("FrameWave")
                     .getSync(fmt::format("https://hyperbolus.net/api/macros?level_id={}&format=gdr&page={}", levelId, page));
                 if (api.ok()) {
                     if (auto j = api.json(); j.isOk()) {
@@ -5950,7 +5952,7 @@ namespace online {
                     ++skippedBad;
                     continue;
                 }
-                auto file = web::WebRequest().timeout(std::chrono::seconds(60)).userAgent("ClickBeforeFrames").followRedirects(true).getSync(o.url);
+                auto file = web::WebRequest().timeout(std::chrono::seconds(60)).userAgent("FrameWave").followRedirects(true).getSync(o.url);
                 if (!file.ok()) {
                     continue;
                 }
@@ -6032,7 +6034,7 @@ namespace online {
         int tps = static_cast<int>(settingTps());
         say("autoplay: asking the global brain for a run of this level...");
         std::thread([levelId, print, tps] {
-            auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("ClickBeforeFrames")
+            auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave")
                 .getSync(fmt::format("{}/api/runs?level={}&hash={}&tps={}", online::URL, levelId, print, tps));
             std::optional<Macro> got;
             int confirms = 0;
@@ -6063,7 +6065,7 @@ namespace online {
                     if (v["found"].asBool().unwrapOr(false) && v["inputs"].isArray()) {
                         Macro m;
                         m.file = "global brain run";
-                        m.bot = "Click Before Frames";
+                        m.bot = "FrameWave";
                         m.fps = tps;
                         m.levelId = levelId;
                         confirms = static_cast<int>(v["confirms"].asInt().unwrapOr(1));
@@ -6317,8 +6319,8 @@ namespace online {
             return false;
         }
         if (!account::isLinked()) {
-            *why = "Autoplay needs this game linked to your Discord on the Click Before Frames site: open the menu, go to Account and press Link with Discord.";
-            return false;
+            // v3.2: linking is only for the site's stats page now; autoplay and updates never wait for it
+            say("autoplay: this game isn't linked to Discord (only your stats on the site need that)");
         }
         // test 85: 2-player levels are allowed: a macro plays both players (test 84); without one,
         // autoplay plays player 1 only
@@ -6692,7 +6694,7 @@ namespace online {
             levelFingerprint(layer->m_level), static_cast<int>(settingTps()), name, Mod::get()->getVersion().toVString(), inputs);
         size_t n = autoplay.runFlips.size();
         std::thread([body, n] {
-            auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("ClickBeforeFrames").header("Content-Type", "application/json")
+            auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("FrameWave").header("Content-Type", "application/json")
                 .bodyString(body).postSync(std::string(online::URL) + "/api/runs");
             bool confirmed = res.ok() && res.string().unwrapOr("").find("\"confirmed\":true") != std::string::npos;
             queueInMainThread([ok = res.ok(), confirmed, n] {
@@ -9289,7 +9291,7 @@ namespace online {
 // stars, the odd shooting star) with a tab for each category: Buffer, Prediction, Modes,
 // Custom (each game mode's own frames) and Tools. Opens with the menu key in a level or the
 // heart button on the main menu.
-// v3.0 menu: a sidebar (CBF logo, Log / Stage / Modes / Tools, theme picker, platform), a header
+// v3.0 menu: a sidebar (FrameWave logo, Log / Stage / Modes / Tools, theme picker, platform), a header
 // with the stage chip, a footer with the settings gear. Settings and Tuning are pages of their own
 // with a Done button. Everything is drawn in code (CCDrawNode), so it looks the same everywhere.
 class BufferMenu : public geode::Popup {
@@ -9761,14 +9763,14 @@ private:
         m_onlineDot->setVisible(false);
         refreshOnline();
 
-        // the logo: a big glowing CBF with the version next to it
+        // the logo: a big glowing "FW" (FrameWave) with the name and version under it
         for (int i = 3; i >= 1; --i) {
-            auto* g = label(m_frame, "CBF", 1.15f + i * 0.04f, m_t.main, { 16.f - i * 1.2f, H - 30.f }, { 0.f, 0.5f }, true);
+            auto* g = label(m_frame, "FW", 1.15f + i * 0.04f, m_t.main, { 16.f - i * 1.2f, H - 26.f }, { 0.f, 0.5f }, true);
             g->setOpacity(static_cast<GLubyte>(35 / i));
         }
-        auto* logo = label(m_frame, "CBF", 1.15f, m_light ? m_t.main : m_t.soft, { 16.f, H - 30.f }, { 0.f, 0.5f }, true);
-        float lw = logo->getScaledContentSize().width;
-        label(m_frame, Mod::get()->getVersion().toVString(), 0.36f, m_t.main, { 18.f + lw, H - 38.f }, { 0.f, 0.5f }, true);
+        label(m_frame, "FW", 1.15f, m_light ? m_t.main : m_t.soft, { 16.f, H - 26.f }, { 0.f, 0.5f }, true);
+        label(m_frame, fmt::format("FrameWave {}", Mod::get()->getVersion().toVString()), 0.3f, m_t.main, { 16.f, H - 42.f }, { 0.f, 0.5f }, true)
+            ->limitLabelWidth(SIDE - 22.f, 0.3f, 0.16f);
         auto* sep = CCLayerColor::create({ m_t.main.r, m_t.main.g, m_t.main.b, 110 }, SIDE - 28.f, 1.f);
         sep->setPosition({ 14.f, H - 52.f });
         m_frame->addChild(sep);
@@ -10126,7 +10128,7 @@ private:
         button(m_pageMenu, "Show On Screen", menu_selector(BufferMenu::onConsole), { rx + 14.f + bw * 1.5f, FOOT + 20.f }, bw);
     }
 
-    // test 91: your account: link this game to your Discord on the CBF site, and your autoplay's stats
+    // test 91: your account (optional): link this game to your Discord on the site, and your autoplay's stats
     void pageAccount() {
         pageTitle("Account");
         float x = contentX(), w = contentW(), top = contentTop();
@@ -10135,7 +10137,7 @@ private:
         if (!st.loaded && account::status.empty()) {
             account::refresh();
         }
-        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Your account", "CBF site");
+        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Your account", "optional");
         std::string savedName = Mod::get()->getSavedValue<std::string>("account-name", "");
         bool linked = st.loaded ? st.linked : !savedName.empty();
         std::string name = st.loaded ? st.name : savedName;
@@ -10148,8 +10150,10 @@ private:
             }
         }
         else {
+            // v3.2: linking is only for the site's stats page; autoplay and updates work without it
             label(m_page, "Link this game to your Discord", 0.42f, m_text, { x + colW / 2.f, y }) ->limitLabelWidth(colW - 20.f, 0.42f, 0.15f);
-            label(m_page, "to see your stats here and on the site.", 0.36f, m_muted, { x + colW / 2.f, y - 13.f })->limitLabelWidth(colW - 20.f, 0.36f, 0.15f);
+            label(m_page, "to see your stats on the site. Not needed", 0.36f, m_muted, { x + colW / 2.f, y - 13.f })->limitLabelWidth(colW - 20.f, 0.36f, 0.15f);
+            label(m_page, "for autoplay or updates.", 0.36f, m_muted, { x + colW / 2.f, y - 24.f })->limitLabelWidth(colW - 20.f, 0.36f, 0.15f);
             button(m_pageMenu, account::linking ? "Waiting for the browser..." : "Link with Discord", menu_selector(BufferMenu::onLinkAccount),
                 { x + colW / 2.f, y - 42.f }, colW - 24.f, !account::linking, 0, 22.f, ccColor3B { 88, 101, 242 });
         }
@@ -10218,12 +10222,22 @@ private:
             auto* d0 = CCDrawNode::create();
             m_page->addChild(d0, 1);
             CCDrawNode* sw = nullptr;
-            roundRect(d0, { x + 5.f, y - 10.f, colW - 10.f, 20.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
                 col(m_t.main, 0.25f));
-            label(m_page, "Pause Menu Button", 0.48f, m_text, { x + 12.f, y + 3.5f }, { 0.f, 0.5f });
-            label(m_page, "The heart button in the pause menu", 0.3f, m_muted, { x + 12.f, y - 5.f }, { 0.f, 0.5f });
+            label(m_page, "Pause Menu Button", 0.46f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
             switchItem({ x + colW - 23.f, y }, Mod::get()->getSavedValue<bool>("pause-button", true), menu_selector(BufferMenu::onPauseButton), 0, &sw);
-            y -= 21.f;
+            y -= 19.f;
+        }
+        {
+            // v3.2: the in-game watermark ("FrameWave | stage" in the bottom left), off by default
+            auto* d0 = CCDrawNode::create();
+            m_page->addChild(d0, 1);
+            CCDrawNode* sw = nullptr;
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+                col(m_t.main, 0.25f));
+            label(m_page, "In-Game Watermark", 0.46f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
+            switchItem({ x + colW - 23.f, y }, Mod::get()->getSettingValue<bool>("watermark"), menu_selector(BufferMenu::onWatermark), 0, &sw);
+            y -= 19.f;
         }
         auto row = [&](char const* name) {
             auto* d0 = CCDrawNode::create();
@@ -10648,6 +10662,15 @@ private:
         rebuildPage();
     }
 
+    // v3.2: the in-game watermark ("FrameWave | stage" in the bottom left), off by default
+    void onWatermark(CCObject*) {
+        bool on = !Mod::get()->getSettingValue<bool>("watermark");
+        Mod::get()->setSettingValue<bool>("watermark", on);
+        refreshWatermark();
+        say("in-game watermark {}", on ? "on (bottom left, while the buffer is on)" : "off");
+        rebuildPage();
+    }
+
     void onStageButton(CCObject* sender) {
         int i = sender->getTag();
         if (i == static_cast<int>(std::size(STAGE_BTN))) {
@@ -10753,12 +10776,8 @@ private:
     }
 
     // test 90: check for / install the newest version
+    // v3.2: no Discord linking needed (it used to send you to the Account tab first)
     void onUpdates(CCObject*) {
-        if (!account::isLinked()) {
-            s_tab = s_back = TAB_ACCOUNT;  // test 92: link first
-            rebuildPage();
-            return;
-        }
         manualUpdate();
         rebuildPage();
     }
@@ -10813,10 +10832,6 @@ private:
         }
         std::string why;
         if (!startAutoplay(&why)) {
-            if (!account::isLinked()) {
-                s_tab = s_back = TAB_ACCOUNT;  // test 92: straight to where you link
-                rebuildPage();
-            }
             FLAlertLayer::create("Autoplay", why, "OK")->show();
             return;
         }
@@ -10902,7 +10917,7 @@ public:
     }
 };
 
-// v2.75.1: the level complete screen no longer shows "Click Before Frames was on" or the
+// v2.75.1: the level complete screen no longer shows "the mod was on" or the
 // saves count in the top right corner; the attempt is still finished here.
 class $modify(BufEndLevelLayer, EndLevelLayer) {
     void customSetup() {
@@ -10919,7 +10934,7 @@ class $modify(BufEndLevelLayer, EndLevelLayer) {
 // builds the pause menu with its setup inlined, so the customSetup hook alone never ran there;
 // PlayLayer::pauseGame (below) adds it after the pause menu is shown. Never added twice.
 static void addPauseButton(CCNode* pause) {
-    if (!pause || pause->getChildByID("click-before-frames-menu"_spr)) {
+    if (!pause || pause->getChildByID("framewave-menu"_spr)) {
         return;
     }
     // v3.0: can be switched off in the menu's Settings (the menu key still opens it)
@@ -10934,12 +10949,12 @@ static void addPauseButton(CCNode* pause) {
     auto* button = CCMenuItemExt::createSpriteExtra(sprite, [](CCMenuItemSpriteExtra*) {
         BufferMenu::open();
     });
-    button->setID("click-before-frames-button"_spr);
+    button->setID("framewave-button"_spr);
     auto* menu = CCMenu::create();
     menu->addChild(button);
     auto win = CCDirector::get()->getWinSize();
     menu->setPosition({ win.width - 40.f, 40.f });
-    menu->setID("click-before-frames-menu"_spr);
+    menu->setID("framewave-menu"_spr);
     pause->addChild(menu, 10);
 }
 
@@ -10987,7 +11002,7 @@ $on_mod(Loaded) {
         AllocConsole();
         FILE* out = nullptr;
         freopen_s(&out, "CONOUT$", "w", stdout);
-        SetConsoleTitleA("Click Before Frames - Live Console");
+        SetConsoleTitleA("FrameWave - Live Console");
     }
 #endif
     if (Loader::get()->isModLoaded("syzzi.click_between_frames")) {
@@ -10997,7 +11012,7 @@ $on_mod(Loaded) {
     if (Loader::get()->isModLoaded("square3ang.cbfextrapolate")) {
         say("CBF Extrapolate detected: visual only, predictions unaffected");
     }
-    say("Click Before Frames v3.0 loaded. Stage key cycles: 0.5f -> 1f -> 2f -> 4f -> 6f -> 8f -> custom -> off");
+    say("FrameWave v3.2 loaded. Stage key cycles: 0.5f -> 1f -> 2f -> 4f -> 6f -> 8f -> custom -> off");
 }
 
 class $modify(BufPlayLayer, PlayLayer) {
@@ -11172,7 +11187,7 @@ class $modify(BufPlayLayer, PlayLayer) {
             buf.panel->addChild(frame);
         }
 
-        auto* title = CCLabelBMFont::create("Click Before Frames", "goldFont.fnt");
+        auto* title = CCLabelBMFont::create("FrameWave", "goldFont.fnt");
         title->setScale(0.55f);
         title->setAnchorPoint({ 0.f, 0.5f });
         title->setPosition({ 10.f, H - 14.f });
@@ -11221,6 +11236,7 @@ class $modify(BufPlayLayer, PlayLayer) {
 
         // v2.95: the watermark is back (v2.92 had dropped it), shorter and smaller than before;
         // on phones smaller still, so it doesn't sit on the touch controls
+        // v3.2: it starts hidden and only shows with the "In-Game Watermark" setting (off by default)
 #ifdef GEODE_IS_MOBILE
         constexpr float WATERMARK_SCALE = 0.18f;
 #else
@@ -11233,6 +11249,7 @@ class $modify(BufPlayLayer, PlayLayer) {
         buf.watermark->setAnchorPoint({ 0.f, 0.f });
         buf.watermark->setPosition({ 4.f, 3.f });
         buf.watermark->setZOrder(1000);
+        buf.watermark->setVisible(false);
         this->addChild(buf.watermark);
         buf.usedThisAttempt = false;
         refreshWatermark();
@@ -11877,7 +11894,7 @@ namespace {
             if (url.empty()) {
                 auto res = web::WebRequest()
                     .timeout(std::chrono::seconds(15))
-                    .userAgent("ClickBeforeFrames")
+                    .userAgent("FrameWave")
                     .header("Accept", "application/vnd.github+json")
                     .getSync(RELEASE_API);
                 if (!res.ok()) {
@@ -11894,7 +11911,7 @@ namespace {
             }
             auto file = web::WebRequest()
                 .timeout(std::chrono::seconds(120))
-                .userAgent("ClickBeforeFrames")
+                .userAgent("FrameWave")
                 .followRedirects(true)
                 .getSync(url);
             if (!file.ok()) {
@@ -11903,7 +11920,7 @@ namespace {
             auto data = std::move(file).data();
             auto version = packageVersion(data);
             if (version.isErr()) {
-                return fail("The downloaded file isn't a valid Click Before Frames build.");
+                return fail("The downloaded file isn't a valid FrameWave build.");
             }
             auto newVersion = version.unwrap();
             if (!(newVersion > Mod::get()->getVersion())) {
@@ -11925,7 +11942,7 @@ namespace {
         }
         updateShown = true;
         say("update: {} is out (you have {})", latestVersion, Mod::get()->getVersion().toVString());
-        createQuickPopup("Click Before Frames", fmt::format("<cp>{}</c> is out! You have {}.{}", latestVersion,
+        createQuickPopup("FrameWave", fmt::format("<cp>{}</c> is out! You have {}.{}", latestVersion,
             Mod::get()->getVersion().toVString(), latestNotes.empty() ? std::string() : "\n\n" + latestNotes), "Later", INSTALL_UPDATES ? "Update now" : "Open page", [](FLAlertLayer*, bool yes) {
                 if (!yes) {
                     return;
@@ -11950,18 +11967,12 @@ namespace {
         if (updating) {
             return "Updating...";
         }
-        if (!account::isLinked()) {
-            return "Updates: Link Account";
-        }
+        // v3.2: updates don't need the game linked to Discord (see checkForUpdate)
         return updateAvailable() ? "Update to " + latestVersion : std::string("Check for Updates");
     }
 
     void manualUpdate() {
         if (updating) {
-            return;
-        }
-        if (!account::isLinked()) {
-            say("update: link this game to your Discord first (Account tab)");
             return;
         }
         if (updateAvailable()) {
@@ -11979,17 +11990,15 @@ namespace {
         if (updateChecked || (!updateAnywhere && !Mod::get()->getSettingValue<bool>("check-updates"))) {
             return;
         }
-        if (!account::isLinked()) {
-            return;  // test 92: updates are for linked games
-        }
+        // v3.2: no Discord linking needed for updates any more (that link is only for the site's stats)
         updateChecked = true;
         // v2.98: the check reads the newest GitHub release, the same file "Update now" installs
         // (it used to read the code's version, which could be ahead of the newest release: the
         // popup said "v2.97 is out" and the install then found only v2.95)
         std::thread([] {
-            // test 90: the version uploaded on the CBF site's admin page comes first (GitHub otherwise)
+            // test 90: the version uploaded on the FrameWave site's admin page comes first (GitHub otherwise)
             if (!std::string_view(online::URL).empty()) {
-                auto site = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("ClickBeforeFrames")
+                auto site = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("FrameWave")
                     .getSync(std::string(online::URL) + "/api/latest");
                 if (site.ok()) {
                     if (auto j = site.json(); j.isOk()) {
@@ -12003,7 +12012,7 @@ namespace {
                                 latestVersion = name;
                                 latestAssetUrl = url;
                                 latestNotes = notes;
-                                say("update: {} is on the CBF site{}", name, notes.empty() ? "" : ": " + notes);
+                                say("update: {} is on the FrameWave site{}", name, notes.empty() ? "" : ": " + notes);
                                 auto* scene = CCScene::get();
                                 if (updateAnywhere || (scene && scene->getChildByID("MenuLayer"))) {
                                     showUpdatePopup();
@@ -12022,7 +12031,7 @@ namespace {
             }
             auto res = web::WebRequest()
                 .timeout(std::chrono::seconds(10))
-                .userAgent("ClickBeforeFrames")
+                .userAgent("FrameWave")
                 .header("Accept", "application/vnd.github+json")
                 .getSync(RELEASE_API);
             if (!res.ok()) {
@@ -12045,7 +12054,7 @@ namespace {
                 // a release named something else: the version inside its .geode decides
                 auto file = web::WebRequest()
                     .timeout(std::chrono::seconds(60))
-                    .userAgent("ClickBeforeFrames")
+                    .userAgent("FrameWave")
                     .followRedirects(true)
                     .getSync(url);
                 if (!file.ok()) {
@@ -12095,7 +12104,7 @@ class $modify(BufMenuLayer, MenuLayer) {
             return true;
         }
         auto* item = CCMenuItemSpriteExtra::create(sprite, this, menu_selector(BufMenuLayer::onBufferMenu));
-        item->setID("click-before-frames-button"_spr);
+        item->setID("framewave-button"_spr);
         if (auto* bottom = this->getChildByID("bottom-menu")) {
             bottom->addChild(item);
             bottom->updateLayout();

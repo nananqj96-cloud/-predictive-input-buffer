@@ -6,9 +6,9 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v3.1.0",
+	"version": "v3.2.0",
 	"id": "basu.input-buffer",
-	"name": "Click Before Frames",
+	"name": "FrameWave",
 	"developer": "BASU",
 	"description": "Trajectory-based input buffer: delays early clicks/releases by up to 8+ frames, with orb, pad and portal-aware prediction. github.com/raresdalas1009/-predictive-input-buffer",
 	"settings": {
@@ -407,6 +407,12 @@
 			"description": "Draws the path autoplay plans (and its inputs) on the level. Off for clean showcase recordings; autoplay plays the same either way.",
 			"default": false
 		},
+		"watermark": {
+			"type": "bool",
+			"name": "In-Game Watermark",
+			"description": "Shows \"FrameWave | stage\" in the bottom left corner while the buffer is on (never in practice mode). Off by default: turn it on if you want recordings to show the mod was on.",
+			"default": false
+		},
 		"autoplay-label": {
 			"type": "string",
 			"name": "Autoplay Label",
@@ -417,13 +423,13 @@
 		"global-brain": {
 			"type": "bool",
 			"name": "Global Brain",
-			"description": "When autoplay finishes a level from its start, the run is shared with the Click Before Frames server (the level, its exact version, your TPS and the button presses; nothing about you), and autoplay plays runs other games finished before looking on Hyperbolus. Off: nothing is sent or used.",
+			"description": "When autoplay finishes a level from its start, the run is shared with the FrameWave server (the level, its exact version, your TPS and the button presses; nothing about you), and autoplay plays runs other games finished before looking on Hyperbolus. Off: nothing is sent or used.",
 			"default": true
 		},
 		"online-players": {
 			"type": "bool",
 			"name": "Show Online Players",
-			"description": "Shows how many Click Before Frames players are online in the window's footer. To count you, every 90 seconds the game sends the Click Before Frames server an anonymous random id, your device type and the mod's version. No name, account, level or gameplay. Turn it off and nothing is sent.",
+			"description": "Shows how many FrameWave players are online in the window's footer. To count you, every 90 seconds the game sends the FrameWave server an anonymous random id, your device type and the mod's version. No name, account, level or gameplay. Turn it off and nothing is sent.",
 			"default": true
 		},
 		"check-updates": {
