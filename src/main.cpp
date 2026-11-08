@@ -1,4 +1,4 @@
-// Click Before Frames v2.9 (cube-style wave, wave auto-release, orb alignment, full ghost state, drift check, in-game console on F9)
+// FrameWave v3.2 (was Click Before Frames) (cube-style wave, wave auto-release, orb alignment, full ghost state, drift check, in-game console on F9)
 //
 // When you click (or release, in wave / robot), a hidden "ghost" player is simulated
 // ahead with your input. If the ghost dies, the input is retried with 1..N ticks of
@@ -25,6 +25,7 @@
 #include <Geode/modify/LevelEditorLayer.hpp>
 #include <Geode/modify/MenuLayer.hpp>
 #include <Geode/ui/TextInput.hpp>
+#include "stream.hpp"
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/EndLevelLayer.hpp>
@@ -298,7 +299,7 @@ namespace {
         bool robotAutoRelease = false;  // v2.12: robot auto-release (practice mode only)
         bool autoNormalRuns = false; // v2.14: let auto-release work outside practice too
         CCLabelBMFont* autoTag = nullptr;  // v2.14: on-screen "AUTO-RELEASE ON" tag
-        CCLabelBMFont* watermark = nullptr;  // v2.46: always-on "Click Before Frames" label while the buffer is on
+        CCLabelBMFont* watermark = nullptr;  // v2.46: "FrameWave | stage" label (setting: In-Game Watermark, off by default)
         bool usedThisAttempt = false;      // v2.46: the buffer was on at some point of this attempt
         bool learn = true;           // v2.13: per-level memory learned from your runs
         bool fullState = true;       // v2.11.1: copy the full v2.8 player state into the ghost
@@ -855,17 +856,18 @@ namespace {
     }
 
     // v2.14: a run outside practice where auto-release can press for you is marked on screen.
-    // v2.46 watermark: whenever the buffer is on (any stage but OFF) the level shows it, and
-    // can't be turned off, so runs made with the mod are recognisable.
+    // v2.46 watermark: whenever the buffer is on (any stage but OFF) the level showed a label.
+    // v3.2: the watermark is a setting now ("In-Game Watermark", off by default) and carries the
+    // mod's name, so a normal run isn't branded; turn it on to show in a recording that the mod was on.
     void refreshWatermark() {
         if (!buf.watermark) {
             return;
         }
         // hidden in practice mode (practice runs can't be submitted, and on phones it sat on the
-        // checkpoint buttons); always shown in normal mode while the buffer is on
+        // checkpoint buttons); otherwise shown while the buffer is on and the setting is on
         auto* layer = GameManager::get()->m_playLayer;
-        buf.watermark->setVisible(buf.enabled && !(layer && layer->m_isPracticeMode));
-        buf.watermark->setString(fmt::format("CBF  |  {}", stageText()).c_str());
+        buf.watermark->setVisible(Mod::get()->getSettingValue<bool>("watermark") && buf.enabled && !(layer && layer->m_isPracticeMode));
+        buf.watermark->setString(fmt::format("FrameWave  |  {}", stageText()).c_str());
     }
 
     void refreshAutoTag() {
@@ -887,7 +889,7 @@ namespace {
         auto* mod = Mod::get();
         auto* layer = GameManager::get()->m_playLayer;
         std::string text;
-        text += fmt::format("Click Before Frames {} console export\n", mod->getVersion().toVString());
+        text += fmt::format("FrameWave {} console export\n", mod->getVersion().toVString());
         if (layer && layer->m_level) {
             text += fmt::format("Level: {} (id {}){}\n", std::string(layer->m_level->m_levelName), layer->m_level->m_levelID.value(),
                 layer->m_isPracticeMode ? ", practice" : "");
@@ -4909,7 +4911,7 @@ namespace {
     // the mod presses / lets go only when keeping the button as it is would crash sooner than
     // switching. The level is put in test mode, so the game saves nothing it plays; your own
     // clicks are ignored while it runs, and AUTOPLAY stays on screen.
-// test 66: online players. Every 90 s (setting "Show Online Players") the game sends the CBF server
+// test 66: online players. Every 90 s (setting "Show Online Players") the game sends the FrameWave server
 // an anonymous random id, its platform and the mod's version, nothing else; the server answers with
 // how many are online and offline, shown in the window's footer. The server's code is in web/.
 namespace online {
@@ -4963,7 +4965,7 @@ namespace online {
                 if (Mod::get()->getSettingValue<bool>("online-players")) {
                     auto res = web::WebRequest()
                         .timeout(std::chrono::seconds(10))
-                        .userAgent("ClickBeforeFrames")
+                        .userAgent("FrameWave")
                         .header("Content-Type", "application/json")
                         .bodyString(body)
                         .postSync(std::string(URL) + "/api/ping");
@@ -4991,7 +4993,7 @@ namespace online {
     }
 }
 
-    // ===== test 91: your account (a game linked to your Discord on the CBF site) =====
+    // ===== test 91: your account (a game linked to your Discord on the FrameWave site; optional since v3.2) =====
     namespace account {
         struct Stats {
             bool loaded = false;
@@ -5006,8 +5008,9 @@ namespace online {
         std::string code;        // the code the browser shows while linking
         std::string status;
 
-        // test 92: autoplay and updates need this game linked to Discord on the CBF site (checked with
-        // the site at start; the last answer is kept for when it can't be reached)
+        // test 92: this game linked to Discord on the FrameWave site (checked with the site at
+        // start; the last answer is kept for when it can't be reached). v3.2: only the site's
+        // stats need it - autoplay and updates no longer do.
         bool isLinked() {
             if (stats.loaded) {
                 return stats.linked;
@@ -5021,7 +5024,7 @@ namespace online {
             }
             std::string url = fmt::format("{}/api/account?id={}", online::URL, online::id());
             std::thread([url] {
-                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("ClickBeforeFrames").getSync(url);
+                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave").getSync(url);
                 Stats st;
                 if (res.ok()) {
                     if (auto j = res.json(); j.isOk()) {
@@ -5047,7 +5050,7 @@ namespace online {
                         Mod::get()->setSavedValue("account-name", st.linked ? st.name : std::string());
                     }
                     else {
-                        status = "Couldn't reach the CBF site.";
+                        status = "Couldn't reach the FrameWave site.";
                     }
                     dirty = true;
                 });
@@ -5061,11 +5064,11 @@ namespace online {
                 return;
             }
             linking = true;
-            status = "Opening the CBF site...";
+            status = "Opening the FrameWave site...";
             dirty = true;
             std::string body = fmt::format(R"({{"id":"{}"}})", online::id());
             std::thread([body] {
-                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("ClickBeforeFrames").header("Content-Type", "application/json")
+                auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave").header("Content-Type", "application/json")
                     .bodyString(body).postSync(std::string(online::URL) + "/api/link/start");
                 std::string c, url;
                 if (res.ok()) {
@@ -5077,7 +5080,7 @@ namespace online {
                 if (c.empty()) {
                     queueInMainThread([] {
                         linking = false;
-                        status = "Couldn't reach the CBF site.";
+                        status = "Couldn't reach the FrameWave site.";
                         dirty = true;
                     });
                     return;
@@ -5090,7 +5093,7 @@ namespace online {
                 });
                 for (int i = 0; i < 200; ++i) {
                     std::this_thread::sleep_for(std::chrono::seconds(3));
-                    auto p = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("ClickBeforeFrames")
+                    auto p = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("FrameWave")
                         .getSync(fmt::format("{}/api/link/poll?code={}", online::URL, c));
                     if (!p.ok()) {
                         continue;
@@ -5106,7 +5109,7 @@ namespace online {
                             linking = false;
                             code.clear();
                             status = "Linked to " + name + ".";
-                            say("account: this game is linked to {} on the CBF site", name);
+                            say("account: this game is linked to {} on the FrameWave site", name);
                             refresh();
                         });
                         return;
@@ -5838,7 +5841,7 @@ namespace online {
 
     // the page's data: <script data-page="app" type="application/json">{...}</script>
     std::optional<matjson::Value> hyperbolusPage(std::string const& url) {
-        auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("ClickBeforeFrames").getSync(url);
+        auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("FrameWave").getSync(url);
         if (!res.ok()) {
             return std::nullopt;
         }
@@ -5876,7 +5879,7 @@ namespace online {
             for (int page = 1; page <= std::min(last, 8); ++page) {
                 // test 71: Hyperbolus's own API (the level page's data before)
                 std::optional<matjson::Value> data;
-                auto api = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("ClickBeforeFrames")
+                auto api = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("FrameWave")
                     .getSync(fmt::format("https://hyperbolus.net/api/macros?level_id={}&format=gdr&page={}", levelId, page));
                 if (api.ok()) {
                     if (auto j = api.json(); j.isOk()) {
@@ -5950,7 +5953,7 @@ namespace online {
                     ++skippedBad;
                     continue;
                 }
-                auto file = web::WebRequest().timeout(std::chrono::seconds(60)).userAgent("ClickBeforeFrames").followRedirects(true).getSync(o.url);
+                auto file = web::WebRequest().timeout(std::chrono::seconds(60)).userAgent("FrameWave").followRedirects(true).getSync(o.url);
                 if (!file.ok()) {
                     continue;
                 }
@@ -6032,7 +6035,7 @@ namespace online {
         int tps = static_cast<int>(settingTps());
         say("autoplay: asking the global brain for a run of this level...");
         std::thread([levelId, print, tps] {
-            auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("ClickBeforeFrames")
+            auto res = web::WebRequest().timeout(std::chrono::seconds(15)).userAgent("FrameWave")
                 .getSync(fmt::format("{}/api/runs?level={}&hash={}&tps={}", online::URL, levelId, print, tps));
             std::optional<Macro> got;
             int confirms = 0;
@@ -6063,7 +6066,7 @@ namespace online {
                     if (v["found"].asBool().unwrapOr(false) && v["inputs"].isArray()) {
                         Macro m;
                         m.file = "global brain run";
-                        m.bot = "Click Before Frames";
+                        m.bot = "FrameWave";
                         m.fps = tps;
                         m.levelId = levelId;
                         confirms = static_cast<int>(v["confirms"].asInt().unwrapOr(1));
@@ -6317,8 +6320,8 @@ namespace online {
             return false;
         }
         if (!account::isLinked()) {
-            *why = "Autoplay needs this game linked to your Discord on the Click Before Frames site: open the menu, go to Account and press Link with Discord.";
-            return false;
+            // v3.2: linking is only for the site's stats page now; autoplay and updates never wait for it
+            say("autoplay: this game isn't linked to Discord (only your stats on the site need that)");
         }
         // test 85: 2-player levels are allowed: a macro plays both players (test 84); without one,
         // autoplay plays player 1 only
@@ -6692,7 +6695,7 @@ namespace online {
             levelFingerprint(layer->m_level), static_cast<int>(settingTps()), name, Mod::get()->getVersion().toVString(), inputs);
         size_t n = autoplay.runFlips.size();
         std::thread([body, n] {
-            auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("ClickBeforeFrames").header("Content-Type", "application/json")
+            auto res = web::WebRequest().timeout(std::chrono::seconds(20)).userAgent("FrameWave").header("Content-Type", "application/json")
                 .bodyString(body).postSync(std::string(online::URL) + "/api/runs");
             bool confirmed = res.ok() && res.string().unwrapOr("").find("\"confirmed\":true") != std::string::npos;
             queueInMainThread([ok = res.ok(), confirmed, n] {
@@ -9289,9 +9292,430 @@ namespace online {
 // stars, the odd shooting star) with a tab for each category: Buffer, Prediction, Modes,
 // Custom (each game mode's own frames) and Tools. Opens with the menu key in a level or the
 // heart button on the main menu.
-// v3.0 menu: a sidebar (CBF logo, Log / Stage / Modes / Tools, theme picker, platform), a header
+// v3.0 menu: a sidebar (FrameWave logo, Log / Stage / Modes / Tools, theme picker, platform), a header
 // with the stage chip, a footer with the settings gear. Settings and Tuning are pages of their own
 // with a Done button. Everything is drawn in code (CCDrawNode), so it looks the same everywhere.
+// ==========================================================================================
+// v3.3: the Stream page's two small editors. Both are plain popups, so their text fields are real
+// CCTextInputNodes (the game's own keyboard everywhere, phones included).
+// ==========================================================================================
+
+static constexpr float ED_W = 380.f;
+static constexpr float ED_H = 300.f;
+
+namespace ed {
+    inline ccColor4F c3(ccColor3B c, float a) {
+        return { c.r / 255.f, c.g / 255.f, c.b / 255.f, a };
+    }
+
+    inline void box(CCDrawNode* d, cocos2d::CCRect r, float rad, ccColor4F fill, float border = 0.f, ccColor4F bc = { 0, 0, 0, 0 }) {
+        // this SDK's drawCircle is (centre, radius, fill, borderWidth, borderColour, segments) and
+        // drawRect is (rect, fill, borderWidth, borderColour)
+        rad = std::min(rad, std::min(r.size.width, r.size.height) / 2.f);
+        if (fill.a > 0.f) {
+            d->drawRect(r, fill, 0.f, fill);
+            d->drawCircle({ r.origin.x + rad, r.origin.y + rad }, rad, fill, 0.f, fill, 12);
+            d->drawCircle({ r.getMaxX() - rad, r.origin.y + rad }, rad, fill, 0.f, fill, 12);
+            d->drawCircle({ r.origin.x + rad, r.getMaxY() - rad }, rad, fill, 0.f, fill, 12);
+            d->drawCircle({ r.getMaxX() - rad, r.getMaxY() - rad }, rad, fill, 0.f, fill, 12);
+        }
+        if (border > 0.f) {
+            d->drawRect(r, { 0.f, 0.f, 0.f, 0.f }, border, bc);
+        }
+    }
+
+    inline void dot(CCDrawNode* d, cocos2d::CCPoint at, float r, ccColor4F fill, float border = 0.f, ccColor4F bc = { 0, 0, 0, 0 }) {
+        d->drawCircle(at, r, fill, border, bc, 20);
+    }
+
+    inline CCLabelBMFont* text(CCNode* parent, std::string const& s, float scale, ccColor3B c, cocos2d::CCPoint at,
+        cocos2d::CCPoint anchor = { 0.f, 0.5f }) {
+        auto* l = CCLabelBMFont::create(s.c_str(), "chatFont.fnt");
+        l->setScale(scale);
+        l->setColor(c);
+        l->setAnchorPoint(anchor);
+        l->setPosition(at);
+        parent->addChild(l, 2);
+        return l;
+    }
+
+    inline CCMenuItemSpriteExtra* spriteButton(CCNode* parent, char const* text, char const* sheet, float scale,
+        geode::Function<void(CCMenuItemSpriteExtra*)> fn, cocos2d::CCPoint at) {
+        auto* item = CCMenuItemExt::createSpriteExtra(ButtonSprite::create(text, "goldFont.fnt", sheet, scale), std::move(fn));
+        item->setPosition(at);
+        return item;
+    }
+}  // namespace ed
+
+class GiftEditor : public geode::Popup {
+protected:
+    geode::TextInput* m_input = nullptr;
+
+    bool init() {
+        if (!geode::Popup::init(ED_W, 240.f, "GJ_square04.png")) {
+            return false;
+        }
+        this->setTitle("Donation Message");
+        m_bgSprite->setOpacity(238);
+        auto* d = CCDrawNode::create();
+        m_mainLayer->addChild(d, 1);
+        ed::box(d, { 14.f, 66.f, ED_W - 28.f, 6.f }, 3.f, ed::c3({ 120, 90, 220 }, 0.7f));
+        ed::text(m_mainLayer, "This is a message a donor can send with a tip.", 0.42f, { 205, 205, 225 }, { 20.f, 196.f });
+        m_input = geode::TextInput::create(ED_W - 40.f, "type what the donor says", "chatFont.fnt");
+        m_input->setPosition({ ED_W / 2.f, 150.f });
+        m_input->setMaxCharCount(160);
+        m_input->setCommonFilter(geode::CommonFilter::Any);
+        m_mainLayer->addChild(m_input, 3);
+        ed::text(m_mainLayer, "Wait, do you really think you'll die at $P again?", 0.34f, { 150, 150, 175 }, { 20.f, 126.f });
+        ed::text(m_mainLayer, "$P = the current percentage     $A = the attempt number", 0.34f, { 150, 150, 175 }, { 20.f, 112.f });
+
+        auto* menu = CCMenu::create();
+        menu->setPosition({ 0.f, 0.f });
+        m_mainLayer->addChild(menu, 4);
+        menu->addChild(ed::spriteButton(menu, "Add", "GJ_button_01.png", 0.85f, [this](CCMenuItemSpriteExtra*) {
+            auto value = m_input ? std::string(m_input->getString()) : std::string();
+            if (!value.empty()) {
+                streamui::addGiftMessage(value);
+            }
+            this->onClose(nullptr);
+        }, { ED_W / 2.f + 62.f, 40.f }));
+        menu->addChild(ed::spriteButton(menu, "Cancel", "GJ_button_04.png", 0.85f, [this](CCMenuItemSpriteExtra*) {
+            this->onClose(nullptr);
+        }, { ED_W / 2.f - 62.f, 40.f }));
+        handleTouchPriority(this);
+        return true;
+    }
+
+public:
+    static GiftEditor* create() {
+        auto* ret = new GiftEditor();
+        if (ret->init()) {
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+};
+
+// the bot editor: name, colour, badge, how often it talks, and its own lines
+class BotEditor : public geode::Popup {
+protected:
+    int m_index = -1;
+    streamui::Bot m_bot;
+    std::vector<std::string> m_lines;
+    geode::TextInput* m_name = nullptr;
+    geode::TextInput* m_line = nullptr;
+    CCNode* m_swatches = nullptr;
+    CCNode* m_badges = nullptr;
+    CCNode* m_freqBar = nullptr;
+    CCNode* m_lineList = nullptr;
+    CCLabelBMFont* m_preview = nullptr;
+
+    void redrawSwatches() {
+        if (!m_swatches) {
+            return;
+        }
+        m_swatches->removeAllChildren();
+        auto* menu = CCMenu::create();
+        menu->setPosition({ 0.f, 0.f });
+        m_swatches->addChild(menu);
+        float step = 20.f;
+        for (int i = 0; i < 30; ++i) {
+            int row = i / 10;
+            int col = i % 10;
+            auto* node = CCNode::create();
+            node->setContentSize({ 18.f, 18.f });
+            auto* d = CCDrawNode::create();
+            ed::dot(d, { 9.f, 9.f }, 7.f, ed::c3(streamui::colorOf(i), 1.f), m_bot.color == i ? 1.8f : 0.f,
+                ed::c3({ 255, 255, 255 }, 1.f));
+            node->addChild(d);
+            auto* item = CCMenuItemSpriteExtra::create(node, this, menu_selector(BotEditor::onColor));
+            item->setTag(i);
+            item->setPosition({ 9.f + col * step, 9.f + row * step });
+            menu->addChild(item);
+        }
+        if (m_preview) {
+            m_preview->setColor(streamui::colorOf(m_bot.color));
+        }
+    }
+
+    void redrawBadges() {
+        if (!m_badges) {
+            return;
+        }
+        m_badges->removeAllChildren();
+        auto* menu = CCMenu::create();
+        menu->setPosition({ 0.f, 0.f });
+        m_badges->addChild(menu);
+        float bw = 68.f;
+        for (int i = 0; i < 5; ++i) {
+            auto* node = CCNode::create();
+            node->setContentSize({ bw - 4.f, 20.f });
+            auto* d = CCDrawNode::create();
+            ed::box(d, { 0.f, 0.f, bw - 4.f, 20.f }, 8.f,
+                m_bot.badge == i ? ed::c3({ 120, 90, 220 }, 0.95f) : ed::c3({ 255, 255, 255 }, 0.07f), 0.6f,
+                ed::c3({ 255, 255, 255 }, m_bot.badge == i ? 0.9f : 0.22f));
+            node->addChild(d, -1);
+            float tx = 6.f;
+            if (i > 0) {
+                streamui::drawBadgePreview(d, i, { 6.f, 4.f }, 1.5f);
+                tx = 22.f;
+            }
+            auto* l = CCLabelBMFont::create(streamui::badgeName(i), "chatFont.fnt");
+            l->setScale(0.36f);
+            l->setColor({ 236, 236, 246 });
+            l->setAnchorPoint({ 0.f, 0.5f });
+            l->setPosition({ tx, 10.f });
+            node->addChild(l);
+            auto* item = CCMenuItemSpriteExtra::create(node, this, menu_selector(BotEditor::onBadge));
+            item->setTag(i);
+            item->setPosition({ bw / 2.f + i * bw, 10.f });
+            menu->addChild(item);
+        }
+    }
+
+    void redrawFreq() {
+        if (!m_freqBar) {
+            return;
+        }
+        m_freqBar->removeAllChildren();
+        auto* l = CCLabelBMFont::create(fmt::format("Talks {:.1f}x as often as the rest of chat", m_bot.freq).c_str(), "chatFont.fnt");
+        l->setScale(0.42f);
+        l->setColor({ 214, 214, 234 });
+        l->setAnchorPoint({ 0.f, 0.5f });
+        l->setPosition({ 0.f, 12.f });
+        m_freqBar->addChild(l);
+        auto* d = CCDrawNode::create();
+        float w = 170.f;
+        ed::box(d, { 0.f, 0.f, w, 6.f }, 3.f, { 1.f, 1.f, 1.f, 0.14f });
+        float t = std::clamp((m_bot.freq - 0.1f) / 4.9f, 0.f, 1.f);
+        ed::box(d, { 0.f, 0.f, std::max(5.f, w * t), 6.f }, 3.f, ed::c3({ 110, 205, 255 }, 0.95f));
+        m_freqBar->addChild(d);
+    }
+
+    void redrawLineList() {
+        if (!m_lineList) {
+            return;
+        }
+        m_lineList->removeAllChildren();
+        auto* menu = CCMenu::create();
+        menu->setPosition({ 0.f, 0.f });
+        m_lineList->addChild(menu);
+        if (m_lines.empty()) {
+            ed::text(m_lineList, "No lines of its own: it uses the built-in messages.", 0.34f, { 150, 150, 175 }, { 0.f, 26.f });
+            return;
+        }
+        float y = 26.f;
+        for (size_t i = 0; i < m_lines.size() && i < 4; ++i) {
+            auto* d = CCDrawNode::create();
+            m_lineList->addChild(d, 0);
+            ed::box(d, { 0.f, y - 8.f, ED_W - 78.f, 16.f }, 5.f, ed::c3({ 255, 255, 255 }, 0.06f), 0.4f,
+                ed::c3({ 255, 255, 255 }, 0.16f));
+            auto* l = CCLabelBMFont::create(m_lines[i].c_str(), "chatFont.fnt");
+            l->setScale(0.36f);
+            l->setAnchorPoint({ 0.f, 0.5f });
+            l->setColor({ 225, 225, 240 });
+            l->setPosition({ 6.f, y });
+            l->limitLabelWidth(ED_W - 100.f, 0.36f, 0.2f);
+            m_lineList->addChild(l);
+            auto* node = CCNode::create();
+            node->setContentSize({ 16.f, 16.f });
+            auto* x = CCDrawNode::create();
+            ed::dot(x, { 8.f, 8.f }, 7.f, ed::c3({ 200, 60, 70 }, 0.9f));
+            x->drawSegment({ 5.f, 5.f }, { 11.f, 11.f }, 1.2f, ed::c3({ 255, 255, 255 }, 1.f));
+            x->drawSegment({ 5.f, 11.f }, { 11.f, 5.f }, 1.2f, ed::c3({ 255, 255, 255 }, 1.f));
+            node->addChild(x);
+            auto* item = CCMenuItemSpriteExtra::create(node, this, menu_selector(BotEditor::onLineDelete));
+            item->setTag(static_cast<int>(i));
+            item->setPosition({ ED_W - 66.f, y });
+            menu->addChild(item);
+            y -= 18.f;
+        }
+        if (m_lines.size() > 4) {
+            ed::text(m_lineList, fmt::format("+{} more", m_lines.size() - 4), 0.32f, { 150, 150, 175 }, { 0.f, y });
+        }
+    }
+
+    void build() {
+        float y = ED_H - 52.f;
+        // preview line, styled like a chat message
+        auto* d = CCDrawNode::create();
+        m_mainLayer->addChild(d, 1);
+        ed::box(d, { 16.f, y - 12.f, ED_W - 32.f, 30.f }, 7.f, ed::c3({ 0, 0, 0 }, 0.5f), 0.5f, ed::c3({ 255, 255, 255 }, 0.14f));
+        m_preview = CCLabelBMFont::create(m_bot.name.empty() ? "your bot" : m_bot.name.c_str(), "chatFont.fnt");
+        m_preview->setScale(0.62f);
+        m_preview->setAnchorPoint({ 0.f, 0.5f });
+        m_preview->setColor(streamui::colorOf(m_bot.color));
+        m_preview->setPosition({ 24.f, y + 3.f });
+        m_mainLayer->addChild(m_preview, 2);
+        auto* previewBadge = CCDrawNode::create();
+        m_mainLayer->addChild(previewBadge, 2);
+        if (m_bot.badge > 0) {
+            streamui::drawBadgePreview(previewBadge, m_bot.badge,
+                { 24.f + m_preview->getContentSize().width * 0.62f + 4.f, y - 2.f }, 1.3f);
+        }
+        ed::text(m_mainLayer, ": GOOOOOO", 0.62f, { 226, 226, 236 },
+            { 24.f + m_preview->getContentSize().width * 0.62f + (m_bot.badge > 0 ? 16.f : 2.f), y + 3.f });
+
+        y -= 34.f;
+        ed::text(m_mainLayer, "Username", 0.4f, { 190, 190, 215 }, { 20.f, y });
+        m_name = geode::TextInput::create(ED_W - 40.f, "username", "chatFont.fnt");
+        m_name->setPosition({ ED_W / 2.f, y - 20.f });
+        m_name->setMaxCharCount(25);
+        m_name->setCommonFilter(geode::CommonFilter::ID);
+        m_name->setString(m_bot.name);
+        m_name->setCallback([this](std::string const& v) {
+            m_bot.name = v;
+            if (m_preview) {
+                m_preview->setString(v.empty() ? "your bot" : v.c_str());
+            }
+        });
+        m_mainLayer->addChild(m_name, 3);
+
+        y -= 44.f;
+        ed::text(m_mainLayer, "Name colour", 0.4f, { 190, 190, 215 }, { 20.f, y });
+        m_swatches = CCNode::create();
+        m_swatches->setPosition({ 20.f, y - 24.f });
+        m_mainLayer->addChild(m_swatches, 2);
+        redrawSwatches();
+
+        y -= 70.f;
+        ed::text(m_mainLayer, "Icon next to the name", 0.4f, { 190, 190, 215 }, { 20.f, y });
+        m_badges = CCNode::create();
+        m_badges->setPosition({ 18.f, y - 24.f });
+        m_mainLayer->addChild(m_badges, 2);
+        redrawBadges();
+
+        y -= 46.f;
+        m_freqBar = CCNode::create();
+        m_freqBar->setPosition({ 20.f, y });
+        m_mainLayer->addChild(m_freqBar, 2);
+        redrawFreq();
+        auto* menu = CCMenu::create();
+        menu->setPosition({ 0.f, 0.f });
+        m_mainLayer->addChild(menu, 4);
+        menu->addChild(ed::spriteButton(menu, "-", "GJ_button_04.png", 0.6f, [this](CCMenuItemSpriteExtra*) {
+            m_bot.freq = std::max(0.1f, std::round((m_bot.freq - 0.2f) * 10.f) / 10.f);
+            redrawFreq();
+        }, { ED_W - 74.f, y + 10.f }));
+        menu->addChild(ed::spriteButton(menu, "+", "GJ_button_04.png", 0.6f, [this](CCMenuItemSpriteExtra*) {
+            m_bot.freq = std::min(5.f, std::round((m_bot.freq + 0.2f) * 10.f) / 10.f);
+            redrawFreq();
+        }, { ED_W - 40.f, y + 10.f }));
+
+        y -= 24.f;
+        ed::text(m_mainLayer, "Its own messages (optional)", 0.4f, { 190, 190, 215 }, { 20.f, y });
+        m_line = geode::TextInput::create(ED_W - 96.f, "e.g. LOCK IN CHAT", "chatFont.fnt");
+        m_line->setPosition({ 20.f + (ED_W - 96.f) / 2.f, y - 20.f });
+        m_line->setMaxCharCount(80);
+        m_line->setCommonFilter(geode::CommonFilter::Any);
+        m_line->setCallback([this](std::string const& v) {
+            if (!v.empty() && (v.back() == '\n' || v.back() == '\r')) {
+                addLine();
+            }
+        });
+        m_mainLayer->addChild(m_line, 3);
+        menu->addChild(ed::spriteButton(menu, "Add", "GJ_button_01.png", 0.7f, [this](CCMenuItemSpriteExtra*) {
+            addLine();
+        }, { ED_W - 40.f, y - 20.f }));
+
+        m_lineList = CCNode::create();
+        m_lineList->setPosition({ 20.f, y - 34.f });
+        m_mainLayer->addChild(m_lineList, 2);
+        redrawLineList();
+    }
+
+    void addLine() {
+        if (!m_line) {
+            return;
+        }
+        std::string v = m_line->getString();
+        while (!v.empty() && (v.back() == ' ' || v.back() == '\n' || v.back() == '\r')) {
+            v.pop_back();
+        }
+        if (v.empty()) {
+            return;
+        }
+        if (m_lines.size() < 24) {
+            m_lines.push_back(v);
+        }
+        m_line->setString("");
+        redrawLineList();
+    }
+
+public:
+    static BotEditor* create(int index, streamui::Bot bot) {
+        auto* ret = new BotEditor();
+        if (!ret->init()) {
+            delete ret;
+            return nullptr;
+        }
+        ret->autorelease();
+        ret->setup(index, bot);
+        return ret;
+    }
+
+    void setup(int index, streamui::Bot bot) {
+        m_index = index;
+        m_bot = bot;
+        m_lines = bot.lines;
+        this->setTitle(index < 0 ? "New Bot" : "Edit Bot");
+        m_bgSprite->setOpacity(238);
+        build();
+        auto* menu = CCMenu::create();
+        menu->setPosition({ 0.f, 0.f });
+        m_mainLayer->addChild(menu, 5);
+        menu->addChild(ed::spriteButton(menu, "Save", "GJ_button_01.png", 0.85f, [this](CCMenuItemSpriteExtra*) {
+            this->onSave(nullptr);
+        }, { ED_W / 2.f + 62.f, 26.f }));
+        menu->addChild(ed::spriteButton(menu, "Cancel", "GJ_button_04.png", 0.85f, [this](CCMenuItemSpriteExtra*) {
+            this->onClose(nullptr);
+        }, { ED_W / 2.f - 62.f, 26.f }));
+        handleTouchPriority(this);
+    }
+
+protected:
+    bool init() {
+        return geode::Popup::init(ED_W, ED_H + 30.f, "GJ_square04.png");
+    }
+
+    void onColor(CCObject* sender) {
+        m_bot.color = sender->getTag();
+        redrawSwatches();
+    }
+
+    void onBadge(CCObject* sender) {
+        m_bot.badge = sender->getTag();
+        redrawBadges();
+    }
+
+    void onLineDelete(CCObject* sender) {
+        int i = sender->getTag();
+        if (i >= 0 && i < static_cast<int>(m_lines.size())) {
+            m_lines.erase(m_lines.begin() + i);
+            redrawLineList();
+        }
+    }
+
+    void onSave(CCObject*) {
+        if (m_name) {
+            m_bot.name = std::string(m_name->getString());
+        }
+        if (!streamui::validName(m_bot.name)) {
+            FLAlertLayer::create("That username won't work",
+                "Use 2-25 letters, numbers, <co>_</c> <co>-</c> or <co>.</c> (no spaces). Some words are blocked because this name "
+                "shows up in chat.",
+                "OK")
+                ->show();
+            return;
+        }
+        m_bot.lines = m_lines;
+        streamui::upsertBot(m_index, m_bot);
+        this->onClose(nullptr);
+    }
+};
+
 class BufferMenu : public geode::Popup {
     struct Option {
         char const* key;    // mod setting, or nullptr for the runtime path view
@@ -9331,10 +9755,11 @@ class BufferMenu : public geode::Popup {
         { "save-ding", "Ding On Save", "A sound when a click is saved" },
         { "performance-mode", "Performance Mode", "Lighter searches for weak phones" },
     };
-    static constexpr char const* TABS[] = { "Log", "Stage", "Modes", "Tools", "Account" };  // test 91: Account
-    static constexpr int TAB_ACCOUNT = 4;
-    static constexpr int TAB_TUNING = 5;
-    static constexpr int TAB_SETTINGS = 6;
+    static constexpr char const* TABS[] = { "Log", "Stage", "Modes", "Tools", "Stream", "Account" };  // v3.3: Stream
+    static constexpr int TAB_ACCOUNT = 5;
+    static constexpr int TAB_TUNING = 6;
+    static constexpr int TAB_SETTINGS = 7;
+    static constexpr int TAB_STREAM = 4;
     // stage buttons: Off, then the stages from small to big, then Custom (per-mode frames)
     static constexpr int STAGE_BTN[] = { 7, 0, 1, 2, 3, 4, 5 };
     static constexpr char const* STAGE_LABEL[] = { "Off", "0.5f", "1f", "2f", "4f", "6f", "8f" };
@@ -9385,10 +9810,23 @@ public:
         return { m(a.r, b.r), m(a.g, b.g), m(a.b, b.b) };
     }
 
+    // v3.2 black hole UI: every accent is pulled to a hot gold, so the disk, the switches and the
+    // highlights all belong to the same object
+    static bool blackHole() {
+        return Mod::get()->getSettingValue<bool>("black-hole-ui");
+    }
+
     // the accent colour picked in the menu (the old "Menu theme" setting is no longer used)
     static Theme currentTheme() {
         auto a = accentColor();
-        return { a, mix(a, { 255, 255, 255 }, 0.6f), mix(a, { 255, 255, 255 }, 0.4f), mix(a, { 255, 255, 255 }, 0.5f), "GJ_button_02.png" };
+        auto t = Theme { a, mix(a, { 255, 255, 255 }, 0.6f), mix(a, { 255, 255, 255 }, 0.4f), mix(a, { 255, 255, 255 }, 0.5f), "GJ_button_02.png" };
+        if (blackHole()) {
+            t.main = { 255, 196, 122 };
+            t.soft = { 255, 226, 184 };
+            t.accent = { 255, 150, 92 };
+            t.bg = { 3, 2, 7 };
+        }
+        return t;
     }
 
 private:
@@ -9427,6 +9865,8 @@ private:
     bool m_dragging = false;
     float m_shootTimer = 2.f;
     CCNode* m_sky = nullptr;
+    CCPoint m_hole { 0.f, 0.f };   // v3.2: the black hole's centre, for the sparks that fall in
+    float m_sparkTimer = 0.f;
     // test 66: the online count in the footer
     CCLabelBMFont* m_onlineLabel = nullptr;
     CCDrawNode* m_onlineDot = nullptr;
@@ -9479,6 +9919,48 @@ private:
         d->drawPolygon(pts.data(), static_cast<unsigned>(pts.size()), fill, border, borderColor);
     }
 
+    // ---------- v3.2 black hole: the drawing behind the experimental UI ----------
+
+    // the thin photon ring that makes a black hole readable as one
+    static void drawPhotonRing(CCDrawNode* d, CCPoint c, float r, GLubyte alpha) {
+        for (int i = 0; i < 64; ++i) {
+            float a0 = i * 2.f * 3.14159265f / 64.f;
+            float a1 = (i + 1) * 2.f * 3.14159265f / 64.f;
+            float f = alpha / 255.f;
+            d->drawSegment({ c.x + r * std::cos(a0), c.y + r * std::sin(a0) }, { c.x + r * std::cos(a1), c.y + r * std::sin(a1) }, 1.3f,
+                { f, 0.88f * f, 0.66f * f, f });  // premultiplied, like col()
+        }
+    }
+
+    // the accretion disk: three bands of hot gas, bright on one side (the side falling towards
+    // you) and eaten away where the hole is in front of it. `stretch` squashes it into an ellipse.
+    static void drawDisk(CCDrawNode* d, CCPoint c, float inner, float outer, float stretch, int seed, GLubyte alpha = 255, float from = 0.f,
+        float to = 6.2831853f) {
+        struct Band {
+            float in, out;
+            ccColor3B color;
+            float a;
+        };
+        Band bands[] = { { inner, inner + (outer - inner) * 0.46f, { 255, 248, 226 }, 1.f },
+            { inner + (outer - inner) * 0.18f, inner + (outer - inner) * 0.76f, { 255, 168, 92 }, 0.88f },
+            { inner + (outer - inner) * 0.42f, outer, { 228, 88, 52 }, 0.62f } };
+        for (auto const& b : bands) {
+            int steps = 96;
+            for (int i = 0; i < steps; ++i) {
+                float a0 = from + (to - from) * static_cast<float>(i) / steps;
+                float a1 = from + (to - from) * static_cast<float>(i + 1) / steps;
+                float mid = (a0 + a1) * 0.5f;
+                // bright on the left (approaching) side, dim on the right
+                float k = 0.36f + 0.64f * (0.5f - 0.5f * std::cos(mid - 0.6f));
+                k *= 0.82f + 0.18f * std::sin(static_cast<float>(seed) * 0.7f + mid * 5.f);
+                auto p = [&](float a) { return CCPoint { c.x + b.out * std::cos(a), c.y + stretch * b.out * std::sin(a) }; };
+                float alpha2 = alpha * b.a * k / 255.f;
+                d->drawSegment(p(a0), p(a1), b.out - b.in, { b.color.r / 255.f * alpha2, b.color.g / 255.f * alpha2, b.color.b / 255.f * alpha2,
+                    alpha2 });
+            }
+        }
+    }
+
     static char const* bodyFont() {
         return "exo2.fnt"_spr;
     }
@@ -9501,7 +9983,18 @@ private:
     }
 
     ccColor4F cardFill() const {
+        if (blackHole()) {
+            return col({ 10, 7, 26 }, 0.58f);  // glass: text stays readable, the disk still glows at the edges
+        }
         return m_light ? col({ 255, 255, 255 }, 0.55f) : col({ 255, 255, 255 }, 0.045f);
+    }
+
+    // the fill of a single setting row
+    ccColor4F rowFill() const {
+        if (blackHole()) {
+            return col({ 8, 5, 20 }, 0.52f);
+        }
+        return m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f);
     }
 
     // a pill button: filled with the accent (primary), or glassy with an accent edge
@@ -9579,7 +10072,7 @@ private:
     // a setting row: name (and a grey line under it) on the left, switch on the right
     void optionRow(Option const& o, float x, float y, float width, float rowH) {
         auto* d0 = CCDrawNode::create();
-        roundRect(d0, { x, y - rowH / 2.f + 1.f, width, rowH - 2.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+        roundRect(d0, { x, y - rowH / 2.f + 1.f, width, rowH - 2.f }, 6.f, rowFill(), 0.4f,
             col(m_t.main, 0.25f));
         m_page->addChild(d0, 1);
         CCDrawNode* d = nullptr;
@@ -9604,6 +10097,11 @@ private:
     void card(CCRect r, std::string const& title = "", std::string const& right = "") {
         auto* d = CCDrawNode::create();
         roundRect(d, r, 9.f, cardFill(), 0.6f, col(m_t.main, m_light ? 0.45f : 0.35f));
+        if (blackHole()) {
+            // the rim catches the disk's light
+            roundRect(d, { r.getMinX() + 1.f, r.getMinY() + 1.f, r.size.width - 2.f, r.size.height - 2.f }, 8.5f, { 0, 0, 0, 0 }, 0.4f,
+                col(m_t.soft, 0.16f));
+        }
         m_page->addChild(d, 1);
         if (!title.empty()) {
             label(m_page, title, 0.5f, m_text, { r.getMinX() + 9.f, r.getMaxY() - 10.f }, { 0.f, 0.5f });
@@ -9669,6 +10167,101 @@ private:
 
     // ---------- the window ----------
 
+    // v3.2 black hole UI (experimental): stars orbiting the hole, a lensed accretion disk in three
+    // cross-fading phases (so it looks like turning gas without the ellipse tumbling), the photon
+    // ring and the event horizon, with the near side of the disk passing in front of the hole.
+    void buildBlackHole(CCNode* clip) {
+        CCPoint hole { W * 0.63f, H * 0.43f };
+        m_hole = hole;
+        uint32_t seed = 987654321u;
+        auto rnd = [&seed] {
+            seed = seed * 1103515245u + 12345u;
+            return static_cast<float>((seed >> 8) & 0xffff) / 65535.f;
+        };
+
+        // the wash of light the disk throws on the window
+        auto* wash = CCDrawNode::create();
+        for (int i = 9; i >= 1; --i) {
+            circle(wash, { 0.f, 0.f }, 24.f + i * 17.f, { 0.30f * 0.045f * i, 0.12f * 0.045f * i, 0.34f * 0.045f * i, 0.045f * i }, 56);
+        }
+        wash->setPosition(hole);
+        clip->addChild(wash);
+
+        // the star field, turning slowly around the hole (near stars faster)
+        for (int layer = 0; layer < 2; ++layer) {
+            auto* field = CCNode::create();
+            field->setPosition(hole);
+            clip->addChild(field);
+            field->runAction(CCRepeatForever::create(CCRotateBy::create(layer == 0 ? 150.f : 90.f, layer == 0 ? 360.f : -360.f)));
+            int count = layer == 0 ? 130 : 55;
+            float spread = layer == 0 ? 260.f : 150.f;
+            for (int i = 0; i < count; ++i) {
+                float size = layer == 0 ? 0.5f + rnd() * 0.5f : 0.9f + rnd() * 0.9f;
+                auto* star = CCLayerColor::create({ 255, 255, 255, 255 }, size, size);
+                float ang = rnd() * 6.2831853f;
+                float dist = 40.f + rnd() * spread;  // not "far": Windows.h has a legacy `far` macro
+                star->setPosition({ dist * std::cos(ang), dist * std::sin(ang) * 0.8f });
+                float r = rnd();
+                star->setColor(r < 0.18f ? ccColor3B { 196, 180, 255 } : r < 0.34f ? ccColor3B { 255, 216, 186 } : ccColor3B { 255, 255, 255 });
+                GLubyte hi = static_cast<GLubyte>((layer == 0 ? 90 : 150) + rnd() * 100);
+                GLubyte lo = static_cast<GLubyte>(10 + rnd() * 40);
+                star->setOpacity(hi);
+                float t = 0.8f + rnd() * 2.6f;
+                star->runAction(CCRepeatForever::create(CCSequence::create(CCDelayTime::create(rnd() * 3.f), CCFadeTo::create(t, lo),
+                    CCFadeTo::create(t, hi), nullptr)));
+                field->addChild(star);
+            }
+        }
+
+        // the faint polar jet (the beams real black holes throw out), before the disk
+        auto* jet = CCDrawNode::create();
+        for (int dir = 0; dir < 2; ++dir) {
+            float sign = dir == 0 ? 1.f : -1.f;
+            for (int i = 0; i < 22; ++i) {
+                float y0 = sign * (26.f + i * 5.2f), y1 = sign * (26.f + (i + 1) * 5.2f);
+                float wdt = (3.f + i * 0.55f) * 2.f;
+                float fade = 0.055f * (1.f - i / 22.f);
+                jet->drawSegment({ 0.f, y0 }, { 0.f, y1 }, wdt, { 0.55f * fade, 0.45f * fade, 1.f * fade, fade });
+            }
+        }
+        jet->setPosition(hole);
+        clip->addChild(jet);
+
+        // the far side of the disk
+        auto* back = CCDrawNode::create();
+        drawDisk(back, { 0.f, 0.f }, 33.f, 116.f, 0.33f, 7, 245);
+        back->setPosition(hole);
+        clip->addChild(back, 1);
+        back->runAction(CCRepeatForever::create(CCSequence::create(CCFadeTo::create(2.6f, 210), CCFadeTo::create(2.6f, 255), nullptr)));
+        // two more phases, cross-fading, so the gas looks like it is streaming round
+        for (int i = 0; i < 2; ++i) {
+            auto* phase = CCDrawNode::create();
+            drawDisk(phase, { 0.f, 0.f }, 35.f, 116.f, 0.33f, 23 + i * 18, 200);
+            phase->setPosition(hole);
+            phase->setOpacity(0);
+            clip->addChild(phase, 1);
+            phase->runAction(CCRepeatForever::create(CCSequence::create(CCDelayTime::create(i * 1.5f), CCFadeTo::create(2.2f, 210),
+                CCFadeTo::create(2.2f, 0), CCDelayTime::create(1.1f), nullptr)));
+        }
+
+        // the horizon: black, rimmed by the photon ring
+        auto* horizon = CCDrawNode::create();
+        for (int i = 6; i >= 1; --i) {
+            circle(horizon, { 0.f, 0.f }, 36.f + i * 4.5f, { 0.55f * 0.06f * i, 0.26f * 0.06f * i, 0.62f * 0.06f * i, 0.06f * i }, 48);
+        }
+        circle(horizon, { 0.f, 0.f }, 36.f, { 0.f, 0.f, 0.f, 1.f }, 56);
+        drawPhotonRing(horizon, { 0.f, 0.f }, 37.8f, 255);
+        drawPhotonRing(horizon, { 0.f, 0.f }, 40.4f, 110);
+        horizon->setPosition(hole);
+        clip->addChild(horizon, 3);
+
+        // the near side of the disk, in front of the hole
+        auto* front = CCDrawNode::create();
+        drawDisk(front, { 0.f, 0.f }, 40.f, 112.f, 0.33f, 41, 175, 3.14159265f, 6.2831853f);
+        front->setPosition(hole);
+        clip->addChild(front, 4);
+    }
+
     void buildFrame() {
         if (m_frame) {
             m_frame->removeFromParent();
@@ -9690,6 +10283,11 @@ private:
         m_frame->addChild(clip, -2);
         ccColor3B back = BACKS[std::clamp(m_bg, 0, static_cast<int>(std::size(BACKS)) - 1)];
         GLubyte a = static_cast<GLubyte>(253 * opacity);
+        // v3.2 black hole UI: deep space, a lensed accretion disk and the event horizon
+        auto const BH = blackHole();
+        if (BH) {
+            back = { 3, 2, 7 };
+        }
         CCLayerGradient* sky = nullptr;
         if (m_light) {
             ccColor3B lo = mix({ 214, 208, 234 }, bright(back), 0.25f);
@@ -9706,7 +10304,7 @@ private:
             seed = seed * 1103515245u + 12345u;
             return static_cast<float>((seed >> 8) & 0xffff) / 65535.f;
         };
-        if (!m_light) {
+        if (!m_light && !BH) {
             // stars, drifting slowly, twinkling
             for (int layer = 0; layer < 2; ++layer) {
                 auto* field = CCNode::create();
@@ -9732,19 +10330,35 @@ private:
                 }
             }
         }
-        // a big soft accent orb behind the content, like a planet glow
-        auto* orb = CCDrawNode::create();
-        for (int i = 10; i >= 1; --i) {
-            circle(orb, { W * 0.62f, H * 0.42f }, 18.f * i, col(m_t.main, m_light ? 0.012f : 0.018f), 48);
+        if (BH) {
+            buildBlackHole(clip);
         }
-        clip->addChild(orb);
+        else {
+            // a big soft accent orb behind the content, like a planet glow
+            auto* orb = CCDrawNode::create();
+            for (int i = 10; i >= 1; --i) {
+                circle(orb, { W * 0.62f, H * 0.42f }, 18.f * i, col(m_t.main, m_light ? 0.012f : 0.018f), 48);
+            }
+            clip->addChild(orb);
+        }
         m_sky = clip;
 
         // the sidebar panel, the outer edge, the header line, the footer line
         auto* chrome = CCDrawNode::create();
-        roundRect(chrome, { 0.f, 0.f, W, H }, 14.f, { 0, 0, 0, 0 }, 0.8f, col(m_t.main, 0.8f));
-        roundRect(chrome, { 6.f, 6.f, SIDE - 8.f, H - 12.f }, 11.f, m_light ? col({ 255, 255, 255 }, 0.45f) : col({ 0, 0, 0 }, 0.3f), 0.6f,
-            col(m_t.main, 0.35f));
+        if (BH) {
+            // a violet halo around the window (light bent around the hole) and glass panels
+            for (int i = 4; i >= 1; --i) {
+                roundRect(chrome, { -i * 1.6f, -i * 1.6f, W + i * 3.2f, H + i * 3.2f }, 14.f + i * 1.6f, { 0.42f * 0.05f * i, 0.2f * 0.05f * i, 0.9f * 0.05f * i,
+                    0.05f * i });
+            }
+            roundRect(chrome, { 0.f, 0.f, W, H }, 14.f, { 0, 0, 0, 0 }, 0.9f, col(m_t.main, 0.75f));
+            roundRect(chrome, { 6.f, 6.f, SIDE - 8.f, H - 12.f }, 11.f, col({ 6, 4, 16 }, 0.55f), 0.6f, col({ 150, 110, 255 }, 0.45f));
+        }
+        else {
+            roundRect(chrome, { 0.f, 0.f, W, H }, 14.f, { 0, 0, 0, 0 }, 0.8f, col(m_t.main, 0.8f));
+            roundRect(chrome, { 6.f, 6.f, SIDE - 8.f, H - 12.f }, 11.f, m_light ? col({ 255, 255, 255 }, 0.45f) : col({ 0, 0, 0 }, 0.3f), 0.6f,
+                col(m_t.main, 0.35f));
+        }
         m_frame->addChild(chrome, -1);
         auto* line = CCLayerGradient::create({ m_t.main.r, m_t.main.g, m_t.main.b, 230 }, { m_t.soft.r, m_t.soft.g, m_t.soft.b, 40 }, { 1.f, 0.f });
         line->setContentSize({ W - SIDE - 14.f, 1.5f });
@@ -9761,14 +10375,14 @@ private:
         m_onlineDot->setVisible(false);
         refreshOnline();
 
-        // the logo: a big glowing CBF with the version next to it
+        // the logo: a big glowing "FW" (FrameWave) with the name and version under it
         for (int i = 3; i >= 1; --i) {
-            auto* g = label(m_frame, "CBF", 1.15f + i * 0.04f, m_t.main, { 16.f - i * 1.2f, H - 30.f }, { 0.f, 0.5f }, true);
+            auto* g = label(m_frame, "FW", 1.15f + i * 0.04f, m_t.main, { 16.f - i * 1.2f, H - 26.f }, { 0.f, 0.5f }, true);
             g->setOpacity(static_cast<GLubyte>(35 / i));
         }
-        auto* logo = label(m_frame, "CBF", 1.15f, m_light ? m_t.main : m_t.soft, { 16.f, H - 30.f }, { 0.f, 0.5f }, true);
-        float lw = logo->getScaledContentSize().width;
-        label(m_frame, Mod::get()->getVersion().toVString(), 0.36f, m_t.main, { 18.f + lw, H - 38.f }, { 0.f, 0.5f }, true);
+        label(m_frame, "FW", 1.15f, m_light ? m_t.main : m_t.soft, { 16.f, H - 26.f }, { 0.f, 0.5f }, true);
+        label(m_frame, fmt::format("FrameWave {}", Mod::get()->getVersion().toVString()), 0.3f, m_t.main, { 16.f, H - 42.f }, { 0.f, 0.5f }, true)
+            ->limitLabelWidth(SIDE - 22.f, 0.3f, 0.16f);
         auto* sep = CCLayerColor::create({ m_t.main.r, m_t.main.g, m_t.main.b, 110 }, SIDE - 28.f, 1.f);
         sep->setPosition({ 14.f, H - 52.f });
         m_frame->addChild(sep);
@@ -9812,15 +10426,22 @@ private:
             item->setPosition({ SIDE / 2.f + 1.f, 112.f });
             m_frameMenu->addChild(item);
         }
-        label(m_frame, "Accent", 0.36f, m_muted, { 20.f, 97.f }, { 0.f, 0.5f });
-        label(m_frame, "Background", 0.36f, m_muted, { 20.f, 64.f }, { 0.f, 0.5f });
-        int accent = Mod::get()->getSavedValue<int>("ui-accent", 0);
-        float step = (SIDE - 40.f) / 6.f;
-        for (int i = 0; i < 7; ++i) {
-            bool custom = i == 6;
-            ccColor3B c = custom ? hueColor(Mod::get()->getSavedValue<int>("ui-accent-hue", 262)) : ACCENTS[i];
-            dot({ 22.f + i * step, 84.f }, c, accent == i, custom, menu_selector(BufferMenu::onAccent), i);
-            dot({ 22.f + i * step, 51.f }, bright(BACKS[i]), m_bg == i, false, menu_selector(BufferMenu::onBack), i);
+        if (blackHole()) {
+            // v3.2: the hole picks its own accent and background; the colour dots would fight it
+            label(m_frame, "Black hole  ·  deep space", 0.33f, m_t.main, { SIDE / 2.f + 1.f, 82.f });
+            label(m_frame, "fixed look", 0.3f, m_muted, { SIDE / 2.f + 1.f, 69.f });
+        }
+        else {
+            label(m_frame, "Accent", 0.36f, m_muted, { 20.f, 97.f }, { 0.f, 0.5f });
+            label(m_frame, "Background", 0.36f, m_muted, { 20.f, 64.f }, { 0.f, 0.5f });
+            int accent = Mod::get()->getSavedValue<int>("ui-accent", 0);
+            float step = (SIDE - 40.f) / 6.f;
+            for (int i = 0; i < 7; ++i) {
+                bool custom = i == 6;
+                ccColor3B c = custom ? hueColor(Mod::get()->getSavedValue<int>("ui-accent-hue", 262)) : ACCENTS[i];
+                dot({ 22.f + i * step, 84.f }, c, accent == i, custom, menu_selector(BufferMenu::onAccent), i);
+                dot({ 22.f + i * step, 51.f }, bright(BACKS[i]), m_bg == i, false, menu_selector(BufferMenu::onBack), i);
+            }
         }
 
         // header: the stage chip and the close button; footer: the hint and the settings gear
@@ -9917,9 +10538,10 @@ private:
         menu->setPosition({ 0.f, 0.f });
         m_tabsNode->addChild(menu);
         for (int i = 0; i < static_cast<int>(std::size(TABS)); ++i) {
-            // test 91: 5 tabs between the logo and the theme box (the 4th one's highlight went over the box)
-            float th = 19.f;
-            float y = H - 63.f - i * 21.5f;
+            // v3.3: six tabs, so the column is tighter: the first still clears the logo rule above it
+            // and the last still clears the theme box below
+            float th = 16.f;
+            float y = H - 66.f - i * 16.8f;
             bool active = i == s_tab || (s_tab >= TAB_TUNING && i == s_back);
             float tw = SIDE - 22.f;
             auto* node = CCNode::create();
@@ -10112,7 +10734,7 @@ private:
         {
             float y = top - 136.f;
             auto* d0 = CCDrawNode::create();
-            roundRect(d0, { rx + 5.f, y - 11.f, colW - 10.f, 22.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { rx + 5.f, y - 11.f, colW - 10.f, 22.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
             m_page->addChild(d0, 1);
             bool on = Mod::get()->getSavedValue<bool>("autoplay-takeover", false);
@@ -10126,7 +10748,775 @@ private:
         button(m_pageMenu, "Show On Screen", menu_selector(BufferMenu::onConsole), { rx + 14.f + bw * 1.5f, FOOT + 20.f }, bw);
     }
 
-    // test 91: your account: link this game to your Discord on the CBF site, and your autoplay's stats
+    // test 91: your account (optional): link this game to your Discord on the site, and your autoplay's stats
+
+    // ==========================================================================================
+    // v3.3: the Stream page (chat, viewers, donations, heart monitor)
+    // ==========================================================================================
+    // Three sub-pages behind one tab keeps the window honest: the main page has the switches and
+    // the numbers, "Chat" holds the audience controls and the bot editor, "Alerts" holds the
+    // donation settings and the speech queue.
+
+    int m_streamSub = 0;            // 0 main, 1 chat, 2 alerts
+    int m_botPage = 0;              // which screen of custom bots is showing
+    CCDrawNode* m_streamPreview = nullptr;
+
+    // ---- a row: label on the left, a control on the right, on a soft strip
+    float streamRow(float x, float w, float y, std::string const& name, std::string const& value = "",
+        char const* hint = nullptr) {
+        auto* d = CCDrawNode::create();
+        m_page->addChild(d, 1);
+        roundRect(d, { x + 4.f, y - 8.5f, w - 8.f, 17.f }, 5.f, rowFill(), 0.35f, col(m_t.main, 0.18f));
+        label(m_page, name, 0.4f, m_text, { x + 10.f, y + (hint ? 3.2f : 0.f) }, { 0.f, 0.5f })->limitLabelWidth(w - 70.f, 0.4f, 0.18f);
+        if (hint) {
+            label(m_page, hint, 0.29f, m_muted, { x + 10.f, y - 4.2f }, { 0.f, 0.5f })->limitLabelWidth(w - 70.f, 0.29f, 0.15f);
+        }
+        if (!value.empty()) {
+            label(m_page, value, 0.36f, m_cyan, { x + w - 10.f, y }, { 1.f, 0.5f })->limitLabelWidth(46.f, 0.36f, 0.2f);
+        }
+        return y - 19.f;
+    }
+
+    // two small buttons on the right of a row (for values that go up and down)
+    void streamStepperButtons(float x, float w, float y, SEL_MenuHandler handler, int tag) {
+        button(m_pageMenu, "-", handler, { x + w - 42.f, y }, 15.f, false, tag - 1000, 15.f);
+        button(m_pageMenu, "+", handler, { x + w - 22.f, y }, 15.f, false, tag + 1000, 15.f);
+    }
+
+    // a strip of choices; the picked one is filled
+    void streamChoice(float x, float y, float w, std::initializer_list<char const*> names, int picked, SEL_MenuHandler handler,
+        int tagBase) {
+        size_t n = names.size();
+        if (n == 0) {
+            return;
+        }
+        float gap = 3.f;
+        float bw = (w - gap * static_cast<float>(n - 1)) / static_cast<float>(n);
+        size_t i = 0;
+        for (auto* name : names) {
+            button(m_pageMenu, name, handler, { x + bw / 2.f + static_cast<float>(i) * (bw + gap), y }, bw,
+                static_cast<int>(i) == picked, tagBase + static_cast<int>(i), 15.f);
+            ++i;
+        }
+    }
+
+    void onStreamSub(CCObject* sender) {
+        m_streamSub = sender->getTag();
+        m_botPage = 0;
+        rebuildPage();
+    }
+
+    void onStreamChat(CCObject*) {
+        Mod::get()->setSavedValue("stream-chat", !Mod::get()->getSavedValue<bool>("stream-chat", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamHeadScale(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-head-scale", 0.42f) + (sender->getTag() > 0 ? 0.04f : -0.04f);
+        v = std::clamp(std::round(v * 25.f) / 25.f, 0.10f, 1.20f);
+        Mod::get()->setSavedValue("stream-head-scale", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamEcgWidth(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-ecg-width", 1.f) + (sender->getTag() > 0 ? 0.1f : -0.1f);
+        v = std::clamp(std::round(v * 10.f) / 10.f, 0.3f, 2.5f);
+        Mod::get()->setSavedValue("stream-ecg-width", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamEcg(CCObject*) {
+        Mod::get()->setSavedValue("stream-ecg", !Mod::get()->getSavedValue<bool>("stream-ecg", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamHeader(CCObject*) {
+        Mod::get()->setSavedValue("stream-header", !Mod::get()->getSavedValue<bool>("stream-header", false));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamSpread(CCObject* sender) {
+        int v = Mod::get()->getSavedValue<int>("stream-vspread", 120) + (sender->getTag() > 0 ? 40 : -40);
+        v = std::clamp(v, 20, 400);
+        Mod::get()->setSavedValue("stream-vspread", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamChip(CCObject*) {
+        Mod::get()->setSavedValue("stream-chip", !Mod::get()->getSavedValue<bool>("stream-chip", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamViewers(CCObject*) {
+        Mod::get()->setSavedValue("stream-viewers", !Mod::get()->getSavedValue<bool>("stream-viewers", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamGifts(CCObject*) {
+        Mod::get()->setSavedValue("stream-gifts", !Mod::get()->getSavedValue<bool>("stream-gifts", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamHeart(CCObject*) {
+        Mod::get()->setSavedValue("stream-heart", !Mod::get()->getSavedValue<bool>("stream-heart", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTts(CCObject*) {
+        Mod::get()->setSavedValue("stream-tts", !Mod::get()->getSavedValue<bool>("stream-tts", false));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTtsMessage(CCObject*) {
+        Mod::get()->setSavedValue("stream-tts-message", !Mod::get()->getSavedValue<bool>("stream-tts-message", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamPos(CCObject* sender) {
+        Mod::get()->setSavedValue("stream-pos", sender->getTag());
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamScale(CCObject* sender) {
+        // 0.2x .. 3x in 0.05 steps, so the panel can be made as small or as large as wanted
+        float v = Mod::get()->getSavedValue<float>("stream-scale", 1.f) + (sender->getTag() > 0 ? 0.05f : -0.05f);
+        v = std::clamp(std::round(v * 20.f) / 20.f, 0.2f, 3.f);
+        Mod::get()->setSavedValue("stream-scale", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamOpacity(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-opacity", 0.92f) + (sender->getTag() > 0 ? 0.05f : -0.05f);
+        v = std::clamp(std::round(v * 100.f) / 100.f, 0.15f, 1.f);
+        Mod::get()->setSavedValue("stream-opacity", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamHeight(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-h", 240.f) + (sender->getTag() > 0 ? 20.f : -20.f);
+        v = std::clamp(v, 100.f, 900.f);
+        Mod::get()->setSavedValue("stream-h", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamWidth(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-w", 300.f) + (sender->getTag() > 0 ? 20.f : -20.f);
+        v = std::clamp(v, 150.f, 900.f);
+        Mod::get()->setSavedValue("stream-w", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamSpeedPreset(CCObject* sender) {
+        static float const SPEEDS[] = { 1.f, 3.f, 6.f, 12.f, 22.f, 40.f, 60.f };
+        int i = std::clamp(sender->getTag(), 0, 6);
+        Mod::get()->setSavedValue("stream-speed", SPEEDS[i]);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamSpeedStep(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-speed", 6.f) + (sender->getTag() > 0 ? 1.f : -1.f);
+        v = std::clamp(v, 1.f, 60.f);
+        Mod::get()->setSavedValue("stream-speed", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamParticipants(CCObject* sender) {
+        static int const COUNTS[] = { 10, 25, 50, 100, 250, 500 };
+        int i = std::clamp(sender->getTag(), 0, 5);
+        Mod::get()->setSavedValue("stream-participants", COUNTS[i]);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamParticipantsStep(CCObject* sender) {
+        int v = Mod::get()->getSavedValue<int>("stream-participants", 100) + (sender->getTag() > 0 ? 25 : -25);
+        v = std::clamp(v, 1, 5000);
+        Mod::get()->setSavedValue("stream-participants", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamViewerMode(CCObject* sender) {
+        // 0 random+gradual, 1 random+instant, 2 exact, 3 minimum only
+        int mode = std::clamp(sender->getTag(), 0, 3);
+        Mod::get()->setSavedValue("stream-vrand", mode != 3);
+        Mod::get()->setSavedValue("stream-vgrad", mode == 0);
+        Mod::get()->setSavedValue("stream-vexact", mode == 2 ? std::max(1, Mod::get()->getSavedValue<int>("stream-vmin", 800)) : 0);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamViewerValue(CCObject* sender) {
+        // tag: 0 = min -, 1 = min +, 2 = max -, 3 = max +, 4 = exact -, 5 = exact +
+        int step = (sender->getTag() % 2 == 1) ? 1 : -1;
+        int which = sender->getTag() / 2;
+        char const* keys[] = { "stream-vmin", "stream-vmax", "stream-vexact" };
+        int defs[] = { 800, 2400, 0 };
+        int v = Mod::get()->getSavedValue<int>(keys[which], defs[which]) + step * 100;
+        v = std::clamp(v, 0, 1000000);
+        Mod::get()->setSavedValue(keys[which], v);
+        // keep min <= max
+        int lo = Mod::get()->getSavedValue<int>("stream-vmin", 800);
+        int hi = Mod::get()->getSavedValue<int>("stream-vmax", 2400);
+        if (lo > hi) {
+            Mod::get()->setSavedValue(which == 0 ? "stream-vmax" : "stream-vmin", std::max(lo, hi));
+        }
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTtsVoice(CCObject* sender) {
+        int n = std::max(1, streamui::voiceCount());
+        int v = (Mod::get()->getSavedValue<int>("stream-tts-voice", 0) + (sender->getTag() > 0 ? 1 : -1) + n) % n;
+        Mod::get()->setSavedValue("stream-tts-voice", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTtsVolume(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-tts-vol", 0.8f) + (sender->getTag() > 0 ? 0.1f : -0.1f);
+        v = std::clamp(std::round(v * 10.f) / 10.f, 0.f, 1.f);
+        Mod::get()->setSavedValue("stream-tts-vol", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTtsRate(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-tts-rate", 1.f) + (sender->getTag() > 0 ? 0.1f : -0.1f);
+        v = std::clamp(std::round(v * 10.f) / 10.f, 0.5f, 2.f);
+        Mod::get()->setSavedValue("stream-tts-rate", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTtsDelay(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-tts-delay", 1.5f) + (sender->getTag() > 0 ? 0.5f : -0.5f);
+        v = std::clamp(v, 0.f, 15.f);
+        Mod::get()->setSavedValue("stream-tts-delay", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamTestMessage(CCObject*) {
+        streamui::previewMessage();
+    }
+
+    void onStreamTestGift(CCObject*) {
+        streamui::testDonation();
+    }
+
+    void onStreamClearChat(CCObject*) {
+        streamui::clearChat();
+    }
+
+    void onStreamTtsClear(CCObject*) {
+        streamui::ttsClear();
+        rebuildPage();
+    }
+
+    void onStreamTtsTest(CCObject*) {
+        streamui::speakTest();
+        rebuildPage();
+    }
+
+    void onStreamHeartSpike(CCObject*) {
+        streamui::heartSpike();
+    }
+
+    void onStreamTimestamps(CCObject*) {
+        Mod::get()->setSavedValue("stream-timestamps", !Mod::get()->getSavedValue<bool>("stream-timestamps", true));
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    // ---- custom bots ----
+    void onBotPage(CCObject* sender) {
+        m_botPage = std::max(0, sender->getTag());
+        rebuildPage();
+    }
+
+    void onBotNew(CCObject*) {
+        openBotEditor(-1, streamui::Bot{});
+    }
+
+    void onBotEdit(CCObject* sender) {
+        int i = sender->getTag();
+        auto const& list = streamui::customBots();
+        if (i >= 0 && i < static_cast<int>(list.size())) {
+            openBotEditor(i, list[static_cast<size_t>(i)]);
+        }
+    }
+
+    void onBotDelete(CCObject* sender) {
+        int i = sender->getTag();
+        auto const& list = streamui::customBots();
+        std::string who = (i >= 0 && i < static_cast<int>(list.size())) ? list[static_cast<size_t>(i)].name : "this bot";
+        createQuickPopup("Delete bot", fmt::format("Remove <cy>{}</c> from chat?\nIts messages are deleted too.", who), "Cancel", "Delete",
+            [this, i](FLAlertLayer*, bool yes) {
+                if (yes) {
+                    streamui::eraseBot(i);
+                    s_botEditing = -1;
+                    dirtyRefresh();
+                }
+            },
+            true);
+    }
+
+    static inline int s_botEditing = -1;
+
+    // the editor: name, colour, badge, how often it talks, and its own lines
+    void openBotEditor(int index, streamui::Bot bot) {
+        s_botEditing = index;
+        auto* popup = BotEditor::create(index, bot);
+        if (popup) {
+            popup->show();
+        }
+    }
+
+    void dirtyRefresh() {
+        if (s_tab == TAB_STREAM) {
+            rebuildPage();
+        }
+    }
+
+    // ---- layout preview: a small picture of where the overlay sits on the screen
+    void drawStreamPreview(CCRect r) {
+        auto* d = CCDrawNode::create();
+        m_page->addChild(d, 1);
+        roundRect(d, r, 6.f, col({ 0, 0, 0 }, 0.35f), 0.5f, col(m_t.main, 0.4f));
+        // the "screen"
+        auto inner = CCRect(r.origin.x + 4.f, r.origin.y + 4.f, r.size.width - 8.f, r.size.height - 8.f);
+        roundRect(d, inner, 4.f, col({ 24, 20, 40 }, 0.9f), 0.4f, col({ 255, 255, 255 }, 0.1f));
+        float scale = Mod::get()->getSavedValue<float>("stream-scale", 1.f);
+        float bw = std::clamp((300.f * scale) / 640.f, 0.2f, 0.75f) * inner.size.width;
+        float bh = std::clamp((240.f * scale) / 360.f, 0.2f, 0.8f) * inner.size.height;
+        int pos = Mod::get()->getSavedValue<int>("stream-pos", 3);
+        float m = 3.f;
+        float bx = pos == 0 || pos == 2 ? inner.origin.x + m : inner.getMaxX() - bw - m;
+        float by = pos == 0 || pos == 1 ? inner.getMaxY() - bh - m : inner.origin.y + m;
+        if (pos == 4) {
+            float cx = Mod::get()->getSavedValue<float>("stream-cx", 0.78f);
+            float cy = Mod::get()->getSavedValue<float>("stream-cy", 0.30f);
+            bx = inner.origin.x + cx * inner.size.width - bw / 2.f;
+            by = inner.origin.y + (1.f - cy) * inner.size.height - bh / 2.f;
+            // a drag hint: four little arrows around the box
+            for (int i = 0; i < 4; ++i) {
+                float an = i * 3.14159265f / 2.f;
+                CCPoint c{ bx + bw / 2.f + std::cos(an) * (bw / 2.f + 7.f), by + bh / 2.f + std::sin(an) * (bh / 2.f + 7.f) };
+                circle(d, c, 1.6f, col(m_t.main, 0.9f), 10);
+            }
+        }
+        bool chat = Mod::get()->getSavedValue<bool>("stream-chat", true);
+        roundRect(d, { bx, by, bw, bh }, 2.f, col(m_t.main, chat ? 0.85f : 0.18f), 0.4f, col(m_t.main, 0.9f));
+        // the heart pill on the right edge
+        if (Mod::get()->getSavedValue<bool>("stream-heart", true)) {
+            roundRect(d, { inner.getMaxX() - 22.f, inner.getMinY() + inner.size.height * 0.58f, 18.f, 5.f }, 2.5f,
+                col({ 235, 24, 36 }, 0.9f));
+        }
+        if (Mod::get()->getSavedValue<bool>("stream-gifts", true)) {
+            roundRect(d, { inner.getMaxX() - 26.f, inner.getMinY() + inner.size.height * 0.44f, 22.f, 7.f }, 2.f,
+                col({ 255, 214, 92 }, 0.55f));
+        }
+        label(m_page, "screen", 0.26f, m_muted, { inner.origin.x + 3.f, inner.origin.y + 4.f }, { 0.f, 0.5f });
+    }
+
+    void pageStream() {
+        pageTitle("Stream");
+        float x = contentX(), w = contentW(), top = contentTop();
+        // sub-page switcher, right of the title
+        float bw = 54.f;
+        button(m_pageMenu, "Setup", menu_selector(BufferMenu::onStreamSub), { W - 40.f - bw * 2.5f, H - HEAD / 2.f }, bw, m_streamSub == 0, 0, 15.f);
+        button(m_pageMenu, "Chat", menu_selector(BufferMenu::onStreamSub), { W - 40.f - bw * 1.5f, H - HEAD / 2.f }, bw, m_streamSub == 1, 1, 15.f);
+        button(m_pageMenu, "Alerts", menu_selector(BufferMenu::onStreamSub), { W - 40.f - bw * 0.5f, H - HEAD / 2.f }, bw, m_streamSub == 2, 2, 15.f);
+
+        if (m_streamSub == 1) {
+            pageStreamChat();
+            return;
+        }
+        if (m_streamSub == 2) {
+            pageStreamAlerts();
+            return;
+        }
+
+        float colW = (w - 6.f) / 2.f;
+        // ---------------- left: what's on screen ----------------
+        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "On Screen", "each one is independent");
+        float y = top - 22.f;
+        auto toggleRow = [&](std::string const& name, std::string const& hint, bool on, SEL_MenuHandler h) {
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            roundRect(d, { x + 4.f, y - 8.5f, colW - 8.f, 17.f }, 5.f, rowFill(), 0.35f, col(m_t.main, 0.18f));
+            label(m_page, name, 0.42f, on ? m_text : m_muted, { x + 10.f, y + 2.6f }, { 0.f, 0.5f });
+            label(m_page, hint, 0.28f, m_muted, { x + 10.f, y - 4.4f }, { 0.f, 0.5f })->limitLabelWidth(colW - 48.f, 0.28f, 0.15f);
+            CCDrawNode* sw = nullptr;
+            switchItem({ x + colW - 17.f, y }, on, h, 0, &sw);
+            y -= 19.f;
+        };
+        toggleRow("Chat", "Twitch chat over the level", Mod::get()->getSavedValue<bool>("stream-chat", true), menu_selector(BufferMenu::onStreamChat));
+        toggleRow("Viewers", "the live viewer count", Mod::get()->getSavedValue<bool>("stream-viewers", true), menu_selector(BufferMenu::onStreamViewers));
+        toggleRow("Donations", "donation alerts on the right", Mod::get()->getSavedValue<bool>("stream-gifts", true), menu_selector(BufferMenu::onStreamGifts));
+        toggleRow("Heart Rate", "the BPM monitor", Mod::get()->getSavedValue<bool>("stream-heart", true), menu_selector(BufferMenu::onStreamHeart));
+        toggleRow("Timestamps", "the clock before each name", Mod::get()->getSavedValue<bool>("stream-timestamps", true), menu_selector(BufferMenu::onStreamTimestamps));
+        toggleRow("BPM Trace", "the cyan line beside the monitor", Mod::get()->getSavedValue<bool>("stream-ecg", true), menu_selector(BufferMenu::onStreamEcg));
+        toggleRow("GdStream Title", "the wordmark above the chat (GD's own font)", Mod::get()->getSavedValue<bool>("stream-header", false), menu_selector(BufferMenu::onStreamHeader));
+        {
+            float hs = Mod::get()->getSavedValue<float>("stream-head-scale", 0.42f);
+            label(m_page, "Title Size", 0.36f, Mod::get()->getSavedValue<bool>("stream-header", false) ? m_text : m_muted,
+                { x + 20.f, y }, { 0.f, 0.5f });
+            label(m_page, fmt::format("{:.2f}", hs), 0.34f, m_cyan, { x + colW - 52.f, y }, { 1.f, 0.5f });
+            streamStepperButtons(x, colW, y, menu_selector(BufferMenu::onStreamHeadScale), 0);
+            y -= 16.f;
+        }
+        toggleRow("Menu Button", "the small \"menu\" handle on the overlay", Mod::get()->getSavedValue<bool>("stream-chip", true), menu_selector(BufferMenu::onStreamChip));
+
+        y -= 4.f;
+        label(m_page, "Position", 0.42f, m_text, { x + 10.f, y }, { 0.f, 0.5f });
+        y -= 16.f;
+        streamChoice(x + 6.f, y, colW - 12.f, { "Top L", "Top R", "Bot L", "Bot R" }, std::clamp(Mod::get()->getSavedValue<int>("stream-pos", 3), 0, 3),
+            menu_selector(BufferMenu::onStreamPos), 0);
+        y -= 18.f;
+        bool custom = Mod::get()->getSavedValue<int>("stream-pos", 3) == 4;
+        button(m_pageMenu, custom ? "Custom Position (drag in game)" : "Custom Position", menu_selector(BufferMenu::onStreamPos),
+            { x + colW / 2.f, y }, colW - 14.f, custom, 4, 16.f);
+        y -= 20.f;
+        label(m_page, custom ? "Drag the chat panel where you want it; the grip in its corner resizes it."
+                             : "Pick a corner, or drag the panel in game.",
+            0.29f, m_muted, { x + 10.f, y + 2.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.29f, 0.15f);
+        y -= 10.f;
+        // preview
+        float ph = std::max(52.f, y - (FOOT + 12.f));
+        drawStreamPreview({ x + 6.f, FOOT + 12.f, colW - 12.f, ph });
+
+        // ---------------- right: size, rate, readouts ----------------
+        float rx = x + colW + 6.f;
+        card({ rx, FOOT + 6.f, colW, top - FOOT - 6.f }, "Overlay", "size and pacing");
+        float ry = top - 22.f;
+        label(m_page, "Chat Size", 0.4f, m_text, { rx + 10.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.1f}x", Mod::get()->getSavedValue<float>("stream-scale", 1.f)), 0.36f, m_cyan,
+            { rx + colW - 52.f, ry }, { 1.f, 0.5f });
+        streamStepperButtons(rx, colW, ry, menu_selector(BufferMenu::onStreamScale), 0);
+        ry -= 18.f;
+        label(m_page, "Chat Box", 0.4f, m_text, { rx + 10.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.0f} x {:.0f}", Mod::get()->getSavedValue<float>("stream-w", 300.f),
+                  Mod::get()->getSavedValue<float>("stream-h", 240.f)),
+            0.34f, m_muted, { rx + colW - 46.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onStreamWidth), { rx + colW - 84.f, ry }, 14.f, false, -1, 15.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onStreamWidth), { rx + colW - 68.f, ry }, 14.f, false, 1, 15.f);
+        button(m_pageMenu, "w-", menu_selector(BufferMenu::onStreamHeight), { rx + colW - 52.f, ry }, 15.f, false, -1, 15.f);
+        button(m_pageMenu, "h+", menu_selector(BufferMenu::onStreamHeight), { rx + colW - 33.f, ry }, 15.f, false, 1, 15.f);
+        ry -= 18.f;
+        label(m_page, "Opacity", 0.4f, m_text, { rx + 10.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.0f}%", Mod::get()->getSavedValue<float>("stream-opacity", 0.92f) * 100.f), 0.36f,
+            m_cyan, { rx + colW - 52.f, ry }, { 1.f, 0.5f });
+        streamStepperButtons(rx, colW, ry, menu_selector(BufferMenu::onStreamOpacity), 0);
+        ry -= 18.f;
+        label(m_page, "BPM Trace Width", 0.4f, Mod::get()->getSavedValue<bool>("stream-ecg", true) ? m_text : m_muted,
+            { rx + 10.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.1f}x", Mod::get()->getSavedValue<float>("stream-ecg-width", 1.f)), 0.36f, m_cyan,
+            { rx + colW - 52.f, ry }, { 1.f, 0.5f });
+        streamStepperButtons(rx, colW, ry, menu_selector(BufferMenu::onStreamEcgWidth), 0);
+        ry -= 20.f;
+        label(m_page, "Messages Per Second", 0.4f, m_text, { rx + 10.f, ry }, { 0.f, 0.5f });
+        ry -= 16.f;
+        {
+            float speed = Mod::get()->getSavedValue<float>("stream-speed", 6.f);
+            int preset = speed <= 1.5f ? 0 : speed <= 4.f ? 1 : speed <= 8.f ? 2 : speed <= 15.f ? 3 : speed <= 28.f ? 4 : speed <= 45.f ? 5 : 6;
+            streamChoice(rx + 6.f, ry, colW - 12.f, { "V.Slow", "Slow", "Normal", "Fast", "V.Fast", "Extreme", "Max" }, preset,
+                menu_selector(BufferMenu::onStreamSpeedPreset), 0);
+        }
+        ry -= 18.f;
+        label(m_page, fmt::format("Custom rate: {:.1f}/s", Mod::get()->getSavedValue<float>("stream-speed", 6.f)), 0.34f, m_muted,
+            { rx + 10.f, ry }, { 0.f, 0.5f });
+        streamStepperButtons(rx, colW, ry, menu_selector(BufferMenu::onStreamSpeedStep), 0);
+        ry -= 20.f;
+        // readouts: live values, so the page doubles as a monitor
+        card({ rx, FOOT + 40.f, colW, ry - FOOT - 43.f }, "Live", "what the game is showing");
+        float ly = ry - 20.f;
+        auto readout = [&](std::string const& name, std::string const& value, ccColor3B c) {
+            label(m_page, name, 0.34f, m_muted, { rx + 10.f, ly }, { 0.f, 0.5f });
+            label(m_page, value, 0.36f, c, { rx + colW - 10.f, ly }, { 1.f, 0.5f })->limitLabelWidth(colW * 0.55f, 0.36f, 0.2f);
+            ly -= 12.f;
+        };
+        readout("Viewers", std::to_string(streamui::currentViewers()), m_cyan);
+        readout("BPM", std::to_string(streamui::currentBpm()), { 255, 120, 120 });
+        readout("Chat lines", std::to_string(streamui::messageCount()), m_text);
+        readout("Messages", std::to_string(streamui::publishedChat), m_muted);
+        readout("In chat", fmt::format("{}", streamui::activeBotCount()), m_text);
+        readout("Donations", std::to_string(streamui::giftMessageCount()), m_muted);
+        // buttons
+        float hb = (colW - 20.f) / 3.f;
+        float by = FOOT + 24.f;
+        button(m_pageMenu, "Send Line", menu_selector(BufferMenu::onStreamTestMessage), { rx + 8.f + hb / 2.f, by }, hb, true, 0, 16.f);
+        button(m_pageMenu, "Test Alert", menu_selector(BufferMenu::onStreamTestGift), { rx + 12.f + hb * 1.5f, by }, hb, false, 0, 16.f);
+        button(m_pageMenu, "Clear Chat", menu_selector(BufferMenu::onStreamClearChat), { rx + 16.f + hb * 2.5f, by }, hb, false, 0, 16.f);
+    }
+
+
+    // ---- chat sub-page: audience size, how the chat feels, and the custom bots
+    void pageStreamChat() {
+        float x = contentX(), w = contentW(), top = contentTop();
+        float colW = (w - 6.f) / 2.f;
+        std::string font = headFont();
+
+        // ---------------- left: the audience ----------------
+        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Audience", "who is in chat");
+        float y = top - 22.f;
+        label(m_page, "Chat Participants", 0.42f, m_text, { x + 10.f, y }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{} unique", streamui::activeBotCount()), 0.34f, m_cyan, { x + colW - 10.f, y }, { 1.f, 0.5f });
+        y -= 16.f;
+        {
+            int p = Mod::get()->getSavedValue<int>("stream-participants", 100);
+            int preset = p == 10 ? 0 : p == 25 ? 1 : p == 50 ? 2 : p == 100 ? 3 : p == 250 ? 4 : p == 500 ? 5 : 6;
+            streamChoice(x + 6.f, y, colW - 12.f, { "10", "25", "50", "100", "250", "500" }, preset,
+                menu_selector(BufferMenu::onStreamParticipants), 0);
+        }
+        y -= 18.f;
+        label(m_page, "Custom amount", 0.34f, m_muted, { x + 10.f, y }, { 0.f, 0.5f });
+        label(m_page, std::to_string(streamui::activeBotCount()), 0.36f, m_text, { x + colW - 52.f, y }, { 1.f, 0.5f });
+        streamStepperButtons(x, colW, y, menu_selector(BufferMenu::onStreamParticipantsStep), 0);
+        y -= 20.f;
+        label(m_page, "How many different people type. Messages Per Second (Setup) decides how",
+            0.28f, m_muted, { x + 10.f, y + 4.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.28f, 0.15f);
+        label(m_page, "often they do it. The two are independent.",
+            0.28f, m_muted, { x + 10.f, y - 3.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.28f, 0.15f);
+        y -= 16.f;
+        // viewer counter box
+        card({ x, FOOT + 6.f, colW, y - FOOT - 9.f }, "Viewer Counter", "the number under the chat");
+        float vy = y - 20.f;
+        bool exact = Mod::get()->getSavedValue<int>("stream-vexact", 0) > 0;
+        bool rand = Mod::get()->getSavedValue<bool>("stream-vrand", true);
+        bool grad = Mod::get()->getSavedValue<bool>("stream-vgrad", true);
+        int mode = exact ? 2 : !rand ? 3 : grad ? 0 : 1;
+        streamChoice(x + 6.f, vy, colW - 12.f, { "Random", "Instant", "Exact", "Min only" }, mode, menu_selector(BufferMenu::onStreamViewerMode), 0);
+        vy -= 20.f;
+        auto valueRow = [&](std::string const& name, int value, int which) {
+            label(m_page, name, 0.38f, m_text, { x + 10.f, vy }, { 0.f, 0.5f });
+            label(m_page, std::to_string(value), 0.38f, m_cyan, { x + colW - 52.f, vy }, { 1.f, 0.5f });
+            button(m_pageMenu, "-", menu_selector(BufferMenu::onStreamViewerValue), { x + colW - 92.f, vy }, 15.f, false, which * 2, 15.f);
+            button(m_pageMenu, "+", menu_selector(BufferMenu::onStreamViewerValue), { x + colW - 75.f, vy }, 15.f, false, which * 2 + 1, 15.f);
+            vy -= 18.f;
+        };
+        valueRow("Minimum", Mod::get()->getSavedValue<int>("stream-vmin", 800), 0);
+        valueRow("Maximum", Mod::get()->getSavedValue<int>("stream-vmax", 2400), 1);
+        valueRow("Exact", Mod::get()->getSavedValue<int>("stream-vexact", 0), 2);
+        {
+            int sp = Mod::get()->getSavedValue<int>("stream-vspread", 120);
+            label(m_page, "Movement", 0.38f, m_text, { x + 10.f, vy }, { 0.f, 0.5f });
+            label(m_page, fmt::format("{}%", sp), 0.38f, m_cyan, { x + colW - 52.f, vy }, { 1.f, 0.5f });
+            button(m_pageMenu, "-", menu_selector(BufferMenu::onStreamSpread), { x + colW - 92.f, vy }, 15.f, false, -1, 15.f);
+            button(m_pageMenu, "+", menu_selector(BufferMenu::onStreamSpread), { x + colW - 75.f, vy }, 15.f, false, 1, 15.f);
+            vy -= 18.f;
+            label(m_page, "How much the count wanders. It always drifts a little; this decides how far.",
+                0.27f, m_muted, { x + 10.f, vy + 6.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.27f, 0.15f);
+            label(m_page, "The shown count never leaves the minimum/maximum range.",
+                0.27f, m_muted, { x + 10.f, vy - 1.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.27f, 0.15f);
+        }
+
+        // ---------------- right: custom bots ----------------
+        float rx = x + colW + 6.f;
+        card({ rx, FOOT + 6.f, colW, top - FOOT - 6.f }, "Custom Bots", "your own chatters");
+        auto const& custom = streamui::customBots();
+        float ry = top - 22.f;
+        label(m_page, fmt::format("{} of yours in a {} person chat", custom.size(), streamui::activeBotCount()),
+            0.32f, m_muted, { rx + 10.f, ry }, { 0.f, 0.5f });
+        button(m_pageMenu, "New Bot", menu_selector(BufferMenu::onBotNew), { rx + colW - 34.f, ry }, 52.f, true, 0, 16.f);
+        ry -= 22.f;
+        // list, 4 per page
+        constexpr int PER = 4;
+        int pages = std::max(1, static_cast<int>((custom.size() + PER - 1) / PER));
+        m_botPage = std::clamp(m_botPage, 0, pages - 1);
+        if (custom.empty()) {
+            label(m_page, "No custom bots yet.", 0.4f, m_muted, { rx + 10.f, ry - 6.f }, { 0.f, 0.5f });
+            label(m_page, "Press New Bot to add someone with their own", 0.29f, m_muted, { rx + 10.f, ry - 18.f }, { 0.f, 0.5f })
+                ->limitLabelWidth(colW - 20.f, 0.29f, 0.15f);
+            label(m_page, "name, colour, icon, rate and messages.", 0.29f, m_muted, { rx + 10.f, ry - 26.f }, { 0.f, 0.5f });
+            ry -= 44.f;
+        }
+        else {
+            for (int i = m_botPage * PER; i < std::min(static_cast<int>(custom.size()), (m_botPage + 1) * PER); ++i) {
+                auto const& b = custom[static_cast<size_t>(i)];
+                auto* d = CCDrawNode::create();
+                m_page->addChild(d, 1);
+                roundRect(d, { rx + 4.f, ry - 17.f, colW - 8.f, 34.f }, 6.f, rowFill(), 0.35f, col(streamui::colorOf(b.color), 0.55f));
+                // the colour dot, the badge, the name
+                circle(d, { rx + 14.f, ry - 5.f }, 3.4f, col(streamui::colorOf(b.color), 1.f), 16);
+                if (b.badge > 0) {
+                    streamui::drawBadgePreview(d, b.badge, { rx + 21.f, ry - 9.f }, 1.f);
+                }
+                label(m_page, b.name, 0.4f, streamui::colorOf(b.color), { rx + (b.badge > 0 ? 32.f : 22.f), ry - 5.f }, { 0.f, 0.5f })
+                    ->limitLabelWidth(colW - 90.f, 0.4f, 0.18f);
+                label(m_page, fmt::format("{} msg  ·  {:.1f}x rate", b.lines.size(), b.freq), 0.28f, m_muted,
+                    { rx + 10.f, ry - 14.f }, { 0.f, 0.5f });
+                button(m_pageMenu, "Edit", menu_selector(BufferMenu::onBotEdit), { rx + colW - 42.f, ry - 9.f }, 26.f, false, i, 15.f);
+                button(m_pageMenu, "X", menu_selector(BufferMenu::onBotDelete), { rx + colW - 15.f, ry - 9.f }, 18.f, false, i, 15.f);
+                ry -= 37.f;
+            }
+            if (pages > 1) {
+                button(m_pageMenu, "<", menu_selector(BufferMenu::onBotPage), { rx + colW - 56.f, FOOT + 16.f }, 20.f, false,
+                    std::max(0, m_botPage - 1), 15.f);
+                label(m_page, fmt::format("{} / {}", m_botPage + 1, pages), 0.32f, m_muted, { rx + colW - 34.f, FOOT + 16.f });
+                button(m_pageMenu, ">", menu_selector(BufferMenu::onBotPage), { rx + colW - 12.f, FOOT + 16.f }, 20.f, false,
+                    std::min(pages - 1, m_botPage + 1), 15.f);
+            }
+        }
+        (void)font;
+        // the database numbers, so the size of the thing is visible
+        float by = std::max(ry, FOOT + 26.f);
+        label(m_page, fmt::format("{} chat lines  ·  {} donation messages", streamui::messageCount(), streamui::giftMessageCount()),
+            0.29f, m_muted, { rx + 10.f, by }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.29f, 0.15f);
+    }
+
+    // ---- alerts sub-page: donations, speech, and the speech queue
+    void pageStreamAlerts() {
+        float x = contentX(), w = contentW(), top = contentTop();
+        float colW = (w - 6.f) / 2.f;
+
+        // ---------------- left: donations + speech ----------------
+        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Donations", "alerts on the middle right");
+        float y = top - 22.f;
+        {
+            bool on = Mod::get()->getSavedValue<bool>("stream-gifts", true);
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            roundRect(d, { x + 4.f, y - 8.5f, colW - 8.f, 17.f }, 5.f, rowFill(), 0.35f, col(m_t.main, 0.18f));
+            label(m_page, "Enable Donations", 0.42f, on ? m_text : m_muted, { x + 10.f, y }, { 0.f, 0.5f });
+            CCDrawNode* sw = nullptr;
+            switchItem({ x + colW - 17.f, y }, on, menu_selector(BufferMenu::onStreamGifts), 0, &sw);
+            y -= 20.f;
+        }
+        label(m_page, "Small tips are common, big ones are rare: $5 up to", 0.28f, m_muted, { x + 10.f, y + 4.f }, { 0.f, 0.5f })
+            ->limitLabelWidth(colW - 20.f, 0.28f, 0.15f);
+        label(m_page, "$1,000. Each alert can read itself out loud.",
+            0.28f, m_muted, { x + 10.f, y - 3.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.28f, 0.15f);
+        y -= 18.f;
+        {
+            bool on = Mod::get()->getSavedValue<bool>("stream-tts", false);
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            roundRect(d, { x + 4.f, y - 8.5f, colW - 8.f, 17.f }, 5.f, rowFill(), 0.35f, col(m_t.main, 0.18f));
+            label(m_page, "Read Donations Out Loud", 0.42f, on ? m_text : m_muted, { x + 10.f, y }, { 0.f, 0.5f });
+            CCDrawNode* sw = nullptr;
+            switchItem({ x + colW - 17.f, y }, on, menu_selector(BufferMenu::onStreamTts), 0, &sw);
+            y -= 20.f;
+        }
+        if (!streamui::ttsAvailable()) {
+            label(m_page, "Speech is available on macOS and iOS builds.", 0.28f, { 255, 170, 90 }, { x + 10.f, y },
+                { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.28f, 0.15f);
+            y -= 12.f;
+        }
+        // voice
+        label(m_page, "Voice", 0.38f, m_text, { x + 10.f, y }, { 0.f, 0.5f });
+        label(m_page, streamui::voiceName(Mod::get()->getSavedValue<int>("stream-tts-voice", 0)), 0.34f, m_cyan,
+            { x + colW - 42.f, y }, { 1.f, 0.5f })->limitLabelWidth(colW * 0.5f, 0.34f, 0.18f);
+        button(m_pageMenu, "<", menu_selector(BufferMenu::onStreamTtsVoice), { x + colW - 66.f, y }, 16.f, false, -1, 15.f);
+        button(m_pageMenu, ">", menu_selector(BufferMenu::onStreamTtsVoice), { x + colW - 48.f, y }, 16.f, false, 1, 15.f);
+        y -= 18.f;
+        auto ttsRow = [&](std::string const& name, std::string const& value, SEL_MenuHandler h) {
+            label(m_page, name, 0.38f, m_text, { x + 10.f, y }, { 0.f, 0.5f });
+            label(m_page, value, 0.34f, m_cyan, { x + colW - 52.f, y }, { 1.f, 0.5f });
+            button(m_pageMenu, "-", h, { x + colW - 84.f, y }, 15.f, false, -1, 15.f);
+            button(m_pageMenu, "+", h, { x + colW - 66.f, y }, 15.f, false, 1, 15.f);
+            y -= 18.f;
+        };
+        ttsRow("Volume", fmt::format("{:.0f}%", Mod::get()->getSavedValue<float>("stream-tts-vol", 0.8f) * 100.f),
+            menu_selector(BufferMenu::onStreamTtsVolume));
+        ttsRow("Speed", fmt::format("{:.1f}x", Mod::get()->getSavedValue<float>("stream-tts-rate", 1.f)),
+            menu_selector(BufferMenu::onStreamTtsRate));
+        ttsRow("Delay before speaking", fmt::format("{:.1f}s", Mod::get()->getSavedValue<float>("stream-tts-delay", 1.5f)),
+            menu_selector(BufferMenu::onStreamTtsDelay));
+        {
+            bool on = Mod::get()->getSavedValue<bool>("stream-tts-message", true);
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            roundRect(d, { x + 4.f, y - 8.f, colW - 8.f, 16.f }, 5.f, rowFill(), 0.35f, col(m_t.main, 0.18f));
+            label(m_page, "Read the message too", 0.36f, on ? m_text : m_muted, { x + 10.f, y }, { 0.f, 0.5f });
+            CCDrawNode* sw = nullptr;
+            switchItem({ x + colW - 17.f, y }, on, menu_selector(BufferMenu::onStreamTtsMessage), 0, &sw);
+            y -= 18.f;
+        }
+        label(m_page, "Off: \"Name donated 100 dollars.\"  On: adds the message after it.", 0.26f, m_muted,
+            { x + 10.f, y + 3.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.26f, 0.15f);
+        y -= 14.f;
+        // the queue
+        card({ x, FOOT + 34.f, colW, std::max(30.f, y - FOOT - 37.f) }, "Speech Queue", "one at a time");
+        label(m_page, fmt::format("{} waiting", streamui::ttsQueueSize()), 0.36f, streamui::ttsQueueSize() ? m_cyan : m_muted,
+            { x + 10.f, y - 16.f }, { 0.f, 0.5f });
+        if (streamui::ttsQueueSize()) {
+            label(m_page, "Alerts never talk over each other: each one waits its turn.",
+                0.27f, m_muted, { x + 10.f, y - 27.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.27f, 0.15f);
+        }
+        float wb = (colW - 20.f) / 2.f;
+        button(m_pageMenu, "Test Voice", menu_selector(BufferMenu::onStreamTtsTest), { x + 8.f + wb / 2.f, FOOT + 16.f }, wb, true, 0, 16.f);
+        button(m_pageMenu, "Clear Queue", menu_selector(BufferMenu::onStreamTtsClear), { x + 12.f + wb * 1.5f, FOOT + 16.f }, wb, false, 0, 16.f);
+
+        // ---------------- right: donation message pool ----------------
+        float rx = x + colW + 6.f;
+        card({ rx, FOOT + 6.f, colW, top - FOOT - 6.f }, "Donation Messages", "yours are used first");
+        auto mine = streamui::customGiftMessages();
+        float ry = top - 22.f;
+        label(m_page, fmt::format("{} built in  ·  {} of yours", streamui::giftMessageCount(), mine.size()), 0.32f, m_muted,
+            { rx + 10.f, ry }, { 0.f, 0.5f });
+        button(m_pageMenu, "New Message", menu_selector(BufferMenu::onGiftNew), { rx + colW - 42.f, ry }, 62.f, true, 0, 16.f);
+        ry -= 22.f;
+        if (mine.empty()) {
+            label(m_page, "No custom messages.", 0.36f, m_muted, { rx + 10.f, ry }, { 0.f, 0.5f });
+            label(m_page, "They can use $P for the percentage and $A for the attempt.", 0.26f, m_muted,
+                { rx + 10.f, ry - 11.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.26f, 0.15f);
+        }
+        else {
+            int shown = 0;
+            for (int i = 0; i < static_cast<int>(mine.size()) && shown < 6; ++i) {
+                auto* d = CCDrawNode::create();
+                m_page->addChild(d, 1);
+                roundRect(d, { rx + 4.f, ry - 12.f, colW - 8.f, 20.f }, 5.f, rowFill(), 0.35f, col(m_t.main, 0.18f));
+                label(m_page, mine[static_cast<size_t>(i)], 0.3f, m_text, { rx + 10.f, ry }, { 0.f, 0.5f })
+                    ->limitLabelWidth(colW - 50.f, 0.3f, 0.15f);
+                button(m_pageMenu, "X", menu_selector(BufferMenu::onGiftDelete), { rx + colW - 15.f, ry }, 18.f, false, i, 15.f);
+                ry -= 22.f;
+                ++shown;
+            }
+            if (static_cast<int>(mine.size()) > shown) {
+                label(m_page, fmt::format("+{} more", static_cast<int>(mine.size()) - shown), 0.28f, m_muted,
+                    { rx + 10.f, ry + 2.f }, { 0.f, 0.5f });
+            }
+        }
+        label(m_page, "A donation with one of your messages picks it about a quarter of the time.",
+            0.26f, m_muted, { rx + 10.f, FOOT + 40.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.26f, 0.15f);
+        button(m_pageMenu, "Test Alert", menu_selector(BufferMenu::onStreamTestGift), { rx + colW / 2.f, FOOT + 24.f }, colW - 16.f, true, 0,
+            17.f);
+    }
+
+    void onGiftNew(CCObject*) {
+        auto* popup = GiftEditor::create();
+        if (popup) {
+            popup->show();
+        }
+    }
+
+    void onGiftDelete(CCObject* sender) {
+        streamui::eraseGiftMessage(sender->getTag());
+        rebuildPage();
+    }
+
     void pageAccount() {
         pageTitle("Account");
         float x = contentX(), w = contentW(), top = contentTop();
@@ -10135,7 +11525,7 @@ private:
         if (!st.loaded && account::status.empty()) {
             account::refresh();
         }
-        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Your account", "CBF site");
+        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Your account", "optional");
         std::string savedName = Mod::get()->getSavedValue<std::string>("account-name", "");
         bool linked = st.loaded ? st.linked : !savedName.empty();
         std::string name = st.loaded ? st.name : savedName;
@@ -10148,8 +11538,10 @@ private:
             }
         }
         else {
+            // v3.2: linking is only for the site's stats page; autoplay and updates work without it
             label(m_page, "Link this game to your Discord", 0.42f, m_text, { x + colW / 2.f, y }) ->limitLabelWidth(colW - 20.f, 0.42f, 0.15f);
-            label(m_page, "to see your stats here and on the site.", 0.36f, m_muted, { x + colW / 2.f, y - 13.f })->limitLabelWidth(colW - 20.f, 0.36f, 0.15f);
+            label(m_page, "to see your stats on the site. Not needed", 0.36f, m_muted, { x + colW / 2.f, y - 13.f })->limitLabelWidth(colW - 20.f, 0.36f, 0.15f);
+            label(m_page, "for autoplay or updates.", 0.36f, m_muted, { x + colW / 2.f, y - 24.f })->limitLabelWidth(colW - 20.f, 0.36f, 0.15f);
             button(m_pageMenu, account::linking ? "Waiting for the browser..." : "Link with Discord", menu_selector(BufferMenu::onLinkAccount),
                 { x + colW / 2.f, y - 42.f }, colW - 24.f, !account::linking, 0, 22.f, ccColor3B { 88, 101, 242 });
         }
@@ -10211,23 +11603,46 @@ private:
         float x = contentX(), w = contentW(), top = contentTop();
         button(m_pageMenu, "Done", menu_selector(BufferMenu::onDone), { W - 98.f - 30.f, H - HEAD / 2.f }, 50.f, true, 0, 16.f);
         float colW = (w - 6.f) / 2.f;
-        // window + helpers (left)
-        card({ x, FOOT + 6.f, colW, top - FOOT - 6.f }, "Window");
-        float y = top - 28.f;
+        // v3.2: appearance first (the experimental black hole UI lives here)
+        bool bh = blackHole();
+        float apH = 40.f;
+        card({ x, top - apH, colW, apH }, "Black Hole UI", "experimental");
         {
             auto* d0 = CCDrawNode::create();
             m_page->addChild(d0, 1);
             CCDrawNode* sw = nullptr;
-            roundRect(d0, { x + 5.f, y - 10.f, colW - 10.f, 20.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { x + 5.f, top - 33.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f, col(m_t.main, 0.25f));
+            label(m_page, "Whole window", 0.42f, bh ? m_cyan : m_muted, { x + 12.f, top - 24.f }, { 0.f, 0.5f });
+            switchItem({ x + colW - 23.f, top - 24.f }, bh, menu_selector(BufferMenu::onBlackHole), 0, &sw);
+        }
+        // window + helpers (left)
+        float cardTop = top - apH - 6.f;
+        card({ x, FOOT + 6.f, colW, cardTop - FOOT - 6.f }, "Window");
+        float y = cardTop - 22.f;
+        {
+            auto* d0 = CCDrawNode::create();
+            m_page->addChild(d0, 1);
+            CCDrawNode* sw = nullptr;
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
-            label(m_page, "Pause Menu Button", 0.48f, m_text, { x + 12.f, y + 3.5f }, { 0.f, 0.5f });
-            label(m_page, "The heart button in the pause menu", 0.3f, m_muted, { x + 12.f, y - 5.f }, { 0.f, 0.5f });
+            label(m_page, "Pause Menu Button", 0.46f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
             switchItem({ x + colW - 23.f, y }, Mod::get()->getSavedValue<bool>("pause-button", true), menu_selector(BufferMenu::onPauseButton), 0, &sw);
-            y -= 21.f;
+            y -= 19.f;
+        }
+        {
+            // v3.2: the in-game watermark ("FrameWave | stage" in the bottom left), off by default
+            auto* d0 = CCDrawNode::create();
+            m_page->addChild(d0, 1);
+            CCDrawNode* sw = nullptr;
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f,
+                col(m_t.main, 0.25f));
+            label(m_page, "In-Game Watermark", 0.46f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
+            switchItem({ x + colW - 23.f, y }, Mod::get()->getSettingValue<bool>("watermark"), menu_selector(BufferMenu::onWatermark), 0, &sw);
+            y -= 19.f;
         }
         auto row = [&](char const* name) {
             auto* d0 = CCDrawNode::create();
-            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, m_light ? col({ 255, 255, 255 }, 0.6f) : col({ 255, 255, 255 }, 0.035f), 0.4f,
+            roundRect(d0, { x + 5.f, y - 9.f, colW - 10.f, 18.f }, 6.f, rowFill(), 0.4f,
                 col(m_t.main, 0.25f));
             m_page->addChild(d0, 1);
             label(m_page, name, 0.48f, m_text, { x + 12.f, y }, { 0.f, 0.5f });
@@ -10266,6 +11681,7 @@ private:
     }
 
     void rebuildPage() {
+        streamui::load();  // v3.3: builds the chat database once (a no-op after the first call)
         if (m_page) {
             m_page->removeFromParent();
         }
@@ -10284,6 +11700,7 @@ private:
             case 0: pageLog(); break;
             case 2: pageModes(); break;
             case 3: pageTools(); break;
+            case TAB_STREAM: pageStream(); break;
             case TAB_ACCOUNT: pageAccount(); break;
             case TAB_TUNING: pageTuning(); break;
             case TAB_SETTINGS: pageSettings(); break;
@@ -10467,7 +11884,17 @@ private:
         m_t = currentTheme();
         m_light = Mod::get()->getSavedValue<bool>("ui-light", false);
         m_bg = Mod::get()->getSavedValue<int>("ui-bg", 0);
-        if (m_light) {
+        if (blackHole()) {
+            // the black hole is its own look: always deep space, whatever the light/dark pill says
+            m_light = false;
+            m_bg = 0;
+        }
+        if (blackHole()) {
+            m_text = { 244, 240, 255 };
+            m_muted = { 160, 152, 200 };
+            m_cyan = { 255, 214, 160 };
+        }
+        else if (m_light) {
             m_text = { 34, 28, 56 };
             m_muted = { 105, 100, 135 };
             m_cyan = { 40, 120, 200 };
@@ -10510,8 +11937,28 @@ private:
                 rebuildPage();  // test 91: the account page shows what just came in
             }
         }
+        if (streamui::dirty) {
+            streamui::dirty = false;
+            if (s_tab == TAB_STREAM) {
+                rebuildPage();  // v3.3: the stream page redraws after an edit (bot list, gifts)
+            }
+        }
+        // v3.2 black hole UI: sparks that spiral into the hole
+        m_sparkTimer -= dt;
+        if (blackHole() && m_sky && m_sparkTimer <= 0.f) {
+            m_sparkTimer = 0.16f + static_cast<float>(std::rand() % 40) / 100.f;
+            // a pivot on the hole; the spark is a child of it, so turning the pivot spirals the spark in
+            auto* turn = CCNode::create();
+            turn->setPosition(m_hole);
+            m_sky->addChild(turn, 2);
+            auto* spark = CCLayerColor::create({ 255, 236, 200, 255 }, 1.4f, 1.4f);
+            spark->setPosition({ 120.f + static_cast<float>(std::rand() % 90), static_cast<float>(std::rand() % 70) - 35.f });
+            turn->addChild(spark);
+            turn->runAction(CCSequence::create(CCRotateBy::create(1.7f, -200.f), CCRemoveSelf::create(), nullptr));
+            spark->runAction(CCSpawn::create(CCScaleTo::create(1.7f, 0.1f), CCFadeOut::create(1.7f), nullptr));
+        }
         m_shootTimer -= dt;
-        if (m_shootTimer <= 0.f && m_sky && !m_light) {
+        if (m_shootTimer <= 0.f && m_sky && !m_light && !blackHole()) {
             m_shootTimer = 3.5f + static_cast<float>(std::rand() % 400) / 100.f;
             auto* streak = CCLayerGradient::create({ 255, 255, 255, 0 }, { 255, 255, 255, 220 }, { 1.f, 0.f });
             streak->setContentSize({ 34.f, 1.2f });
@@ -10648,6 +12095,23 @@ private:
         rebuildPage();
     }
 
+    // v3.2: the experimental black hole UI (the whole window, not just the background)
+    void onBlackHole(CCObject*) {
+        bool on = !Mod::get()->getSettingValue<bool>("black-hole-ui");
+        Mod::get()->setSettingValue<bool>("black-hole-ui", on);
+        say("black hole UI {}", on ? "on (experimental)" : "off");
+        wipe();
+    }
+
+    // v3.2: the in-game watermark ("FrameWave | stage" in the bottom left), off by default
+    void onWatermark(CCObject*) {
+        bool on = !Mod::get()->getSettingValue<bool>("watermark");
+        Mod::get()->setSettingValue<bool>("watermark", on);
+        refreshWatermark();
+        say("in-game watermark {}", on ? "on (bottom left, while the buffer is on)" : "off");
+        rebuildPage();
+    }
+
     void onStageButton(CCObject* sender) {
         int i = sender->getTag();
         if (i == static_cast<int>(std::size(STAGE_BTN))) {
@@ -10753,12 +12217,8 @@ private:
     }
 
     // test 90: check for / install the newest version
+    // v3.2: no Discord linking needed (it used to send you to the Account tab first)
     void onUpdates(CCObject*) {
-        if (!account::isLinked()) {
-            s_tab = s_back = TAB_ACCOUNT;  // test 92: link first
-            rebuildPage();
-            return;
-        }
         manualUpdate();
         rebuildPage();
     }
@@ -10813,10 +12273,6 @@ private:
         }
         std::string why;
         if (!startAutoplay(&why)) {
-            if (!account::isLinked()) {
-                s_tab = s_back = TAB_ACCOUNT;  // test 92: straight to where you link
-                rebuildPage();
-            }
             FLAlertLayer::create("Autoplay", why, "OK")->show();
             return;
         }
@@ -10869,6 +12325,10 @@ protected:
         applyLook();
         buildFrame();
         rebuildPage();
+        // v3.3: the small "menu" chip on the overlay opens this window (and hides itself while the
+        // window is open, so it never sits under the mouse)
+        streamui::setChipAction([]() { BufferMenu::open(); });
+        streamui::setChipVisible(false);
         this->scheduleUpdate();
         return true;
     }
@@ -10878,6 +12338,7 @@ public:
         if (s_open == this) {
             s_open = nullptr;
         }
+        streamui::setChipVisible(true);
     }
 
     static BufferMenu* create() {
@@ -10902,7 +12363,7 @@ public:
     }
 };
 
-// v2.75.1: the level complete screen no longer shows "Click Before Frames was on" or the
+// v2.75.1: the level complete screen no longer shows "the mod was on" or the
 // saves count in the top right corner; the attempt is still finished here.
 class $modify(BufEndLevelLayer, EndLevelLayer) {
     void customSetup() {
@@ -10919,7 +12380,7 @@ class $modify(BufEndLevelLayer, EndLevelLayer) {
 // builds the pause menu with its setup inlined, so the customSetup hook alone never ran there;
 // PlayLayer::pauseGame (below) adds it after the pause menu is shown. Never added twice.
 static void addPauseButton(CCNode* pause) {
-    if (!pause || pause->getChildByID("click-before-frames-menu"_spr)) {
+    if (!pause || pause->getChildByID("framewave-menu"_spr)) {
         return;
     }
     // v3.0: can be switched off in the menu's Settings (the menu key still opens it)
@@ -10934,12 +12395,12 @@ static void addPauseButton(CCNode* pause) {
     auto* button = CCMenuItemExt::createSpriteExtra(sprite, [](CCMenuItemSpriteExtra*) {
         BufferMenu::open();
     });
-    button->setID("click-before-frames-button"_spr);
+    button->setID("framewave-button"_spr);
     auto* menu = CCMenu::create();
     menu->addChild(button);
     auto win = CCDirector::get()->getWinSize();
     menu->setPosition({ win.width - 40.f, 40.f });
-    menu->setID("click-before-frames-menu"_spr);
+    menu->setID("framewave-menu"_spr);
     pause->addChild(menu, 10);
 }
 
@@ -10987,7 +12448,7 @@ $on_mod(Loaded) {
         AllocConsole();
         FILE* out = nullptr;
         freopen_s(&out, "CONOUT$", "w", stdout);
-        SetConsoleTitleA("Click Before Frames - Live Console");
+        SetConsoleTitleA("FrameWave - Live Console");
     }
 #endif
     if (Loader::get()->isModLoaded("syzzi.click_between_frames")) {
@@ -10997,7 +12458,7 @@ $on_mod(Loaded) {
     if (Loader::get()->isModLoaded("square3ang.cbfextrapolate")) {
         say("CBF Extrapolate detected: visual only, predictions unaffected");
     }
-    say("Click Before Frames v3.0 loaded. Stage key cycles: 0.5f -> 1f -> 2f -> 4f -> 6f -> 8f -> custom -> off");
+    say("FrameWave v3.2 loaded. Stage key cycles: 0.5f -> 1f -> 2f -> 4f -> 6f -> 8f -> custom -> off");
 }
 
 class $modify(BufPlayLayer, PlayLayer) {
@@ -11012,6 +12473,11 @@ class $modify(BufPlayLayer, PlayLayer) {
         // test 76: player 2 dying in a dual part is a death too (tests 27-75 didn't see it: no log, and a
         // macro that died there was never planned around)
         bool p2Dual = player == m_player2 && m_gameState.m_isDualMode && m_player1 && !m_player1->m_isDead;
+        // v3.3: the stream overlay reacts to a real death (never to the anticheat spike, and never
+        // to the ghost dying in a simulation)
+        if (!buf.simulating && (player == m_player1 || p2Dual) && player && !player->m_isDead && object != m_anticheatSpike) {
+            streamui::onDeath(static_cast<float>(getCurrentPercent()));
+        }
         if (autoplay.active && !buf.simulating && (player == m_player1 || p2Dual) && !player->m_isDead && object != m_anticheatSpike &&
             !autoplay.diedThisAttempt) {
             int at = autoplay.attemptTick;
@@ -11116,6 +12582,8 @@ class $modify(BufPlayLayer, PlayLayer) {
         dropGhosts();
         readSettings();
         applyStage();
+        streamui::resetOverlay();  // v3.3: a new level starts with an empty chat
+        streamui::setLevelName(level ? std::string(level->m_levelName) : std::string());
         exportLines.clear();
         logClock = 0;
         loadMemory(level);
@@ -11172,7 +12640,7 @@ class $modify(BufPlayLayer, PlayLayer) {
             buf.panel->addChild(frame);
         }
 
-        auto* title = CCLabelBMFont::create("Click Before Frames", "goldFont.fnt");
+        auto* title = CCLabelBMFont::create("FrameWave", "goldFont.fnt");
         title->setScale(0.55f);
         title->setAnchorPoint({ 0.f, 0.5f });
         title->setPosition({ 10.f, H - 14.f });
@@ -11221,6 +12689,7 @@ class $modify(BufPlayLayer, PlayLayer) {
 
         // v2.95: the watermark is back (v2.92 had dropped it), shorter and smaller than before;
         // on phones smaller still, so it doesn't sit on the touch controls
+        // v3.2: it starts hidden and only shows with the "In-Game Watermark" setting (off by default)
 #ifdef GEODE_IS_MOBILE
         constexpr float WATERMARK_SCALE = 0.18f;
 #else
@@ -11233,6 +12702,7 @@ class $modify(BufPlayLayer, PlayLayer) {
         buf.watermark->setAnchorPoint({ 0.f, 0.f });
         buf.watermark->setPosition({ 4.f, 3.f });
         buf.watermark->setZOrder(1000);
+        buf.watermark->setVisible(false);
         this->addChild(buf.watermark);
         buf.usedThisAttempt = false;
         refreshWatermark();
@@ -11281,6 +12751,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     // forgotten (never touched). The ghosts are let go of the same way (like Android): they
     // still point at the old level, so deleting them isn't safe.
     static void forgetLeftLevel() {
+        streamui::leaveLevel();  // v3.3: let the overlay tree go before the level node dies
         benchFinish();
         benchRecording = false;
         saveMemory();
@@ -11296,6 +12767,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void onQuit() {
+        streamui::leaveLevel();  // v3.3: release the overlay tree while the level node is still alive
         benchFinish();
         benchFlush();
         benchRecording = false;
@@ -11311,6 +12783,9 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
+        if (!buf.simulating) {
+            streamui::onComplete();
+        }
         bool wasGenerating = autoplay.active && autoplay.layer == this && autoplay.generating;
         autoplayFinished(this);
         if (wasGenerating) {
@@ -11339,6 +12814,7 @@ class $modify(BufPlayLayer, PlayLayer) {
         if (autoplay.active && autoplay.layer == this && ((m_player1 && m_player1->m_isDead) || p2Died || autoplay.diedThisAttempt)) {
             autoplayDied(this);
         }
+        streamui::onRestart();  // v3.3 stream overlay: a restart eases the heart rate back down
         triggerChecks.clear();  // v2.84
         attemptStartTick = tickCount;  // v2.84.3
         benchFinish();
@@ -11399,6 +12875,41 @@ class $modify(BufPlayLayer, PlayLayer) {
             return;
         }
         PlayLayer::playEndAnimationToPos(position);
+    }
+
+    // v3.3: the stream overlay can be dragged and resized with your finger / mouse. Nothing is
+    // taken unless the touch lands on the chat panel, its corner grip or the small menu chip, so
+    // clicking to jump is untouched.
+    bool ccTouchBegan(CCTouch* touch, CCEvent* event) {
+        // (the overlay only takes touches that land on the chat panel, the corner grip or the chip)
+        if (!buf.simulating && touch && streamui::touchDown(touch->getLocation())) {
+            return true;
+        }
+        return PlayLayer::ccTouchBegan(touch, event);
+    }
+
+    void ccTouchMoved(CCTouch* touch, CCEvent* event) {
+        if (streamui::dragging() && touch) {
+            streamui::touchMove(touch->getLocation());
+            return;
+        }
+        PlayLayer::ccTouchMoved(touch, event);
+    }
+
+    void ccTouchEnded(CCTouch* touch, CCEvent* event) {
+        if (streamui::dragging()) {
+            streamui::touchUp();
+            return;
+        }
+        PlayLayer::ccTouchEnded(touch, event);
+    }
+
+    void ccTouchCancelled(CCTouch* touch, CCEvent* event) {
+        if (streamui::dragging()) {
+            streamui::touchUp();
+            return;
+        }
+        PlayLayer::ccTouchCancelled(touch, event);
     }
 
     // v2.78.3: the level's own circle effect (orb / pad hits) is never spawned by a ghost
@@ -11877,7 +13388,7 @@ namespace {
             if (url.empty()) {
                 auto res = web::WebRequest()
                     .timeout(std::chrono::seconds(15))
-                    .userAgent("ClickBeforeFrames")
+                    .userAgent("FrameWave")
                     .header("Accept", "application/vnd.github+json")
                     .getSync(RELEASE_API);
                 if (!res.ok()) {
@@ -11894,7 +13405,7 @@ namespace {
             }
             auto file = web::WebRequest()
                 .timeout(std::chrono::seconds(120))
-                .userAgent("ClickBeforeFrames")
+                .userAgent("FrameWave")
                 .followRedirects(true)
                 .getSync(url);
             if (!file.ok()) {
@@ -11903,7 +13414,7 @@ namespace {
             auto data = std::move(file).data();
             auto version = packageVersion(data);
             if (version.isErr()) {
-                return fail("The downloaded file isn't a valid Click Before Frames build.");
+                return fail("The downloaded file isn't a valid FrameWave build.");
             }
             auto newVersion = version.unwrap();
             if (!(newVersion > Mod::get()->getVersion())) {
@@ -11925,7 +13436,7 @@ namespace {
         }
         updateShown = true;
         say("update: {} is out (you have {})", latestVersion, Mod::get()->getVersion().toVString());
-        createQuickPopup("Click Before Frames", fmt::format("<cp>{}</c> is out! You have {}.{}", latestVersion,
+        createQuickPopup("FrameWave", fmt::format("<cp>{}</c> is out! You have {}.{}", latestVersion,
             Mod::get()->getVersion().toVString(), latestNotes.empty() ? std::string() : "\n\n" + latestNotes), "Later", INSTALL_UPDATES ? "Update now" : "Open page", [](FLAlertLayer*, bool yes) {
                 if (!yes) {
                     return;
@@ -11950,18 +13461,12 @@ namespace {
         if (updating) {
             return "Updating...";
         }
-        if (!account::isLinked()) {
-            return "Updates: Link Account";
-        }
+        // v3.2: updates don't need the game linked to Discord (see checkForUpdate)
         return updateAvailable() ? "Update to " + latestVersion : std::string("Check for Updates");
     }
 
     void manualUpdate() {
         if (updating) {
-            return;
-        }
-        if (!account::isLinked()) {
-            say("update: link this game to your Discord first (Account tab)");
             return;
         }
         if (updateAvailable()) {
@@ -11979,17 +13484,15 @@ namespace {
         if (updateChecked || (!updateAnywhere && !Mod::get()->getSettingValue<bool>("check-updates"))) {
             return;
         }
-        if (!account::isLinked()) {
-            return;  // test 92: updates are for linked games
-        }
+        // v3.2: no Discord linking needed for updates any more (that link is only for the site's stats)
         updateChecked = true;
         // v2.98: the check reads the newest GitHub release, the same file "Update now" installs
         // (it used to read the code's version, which could be ahead of the newest release: the
         // popup said "v2.97 is out" and the install then found only v2.95)
         std::thread([] {
-            // test 90: the version uploaded on the CBF site's admin page comes first (GitHub otherwise)
+            // test 90: the version uploaded on the FrameWave site's admin page comes first (GitHub otherwise)
             if (!std::string_view(online::URL).empty()) {
-                auto site = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("ClickBeforeFrames")
+                auto site = web::WebRequest().timeout(std::chrono::seconds(10)).userAgent("FrameWave")
                     .getSync(std::string(online::URL) + "/api/latest");
                 if (site.ok()) {
                     if (auto j = site.json(); j.isOk()) {
@@ -12003,7 +13506,7 @@ namespace {
                                 latestVersion = name;
                                 latestAssetUrl = url;
                                 latestNotes = notes;
-                                say("update: {} is on the CBF site{}", name, notes.empty() ? "" : ": " + notes);
+                                say("update: {} is on the FrameWave site{}", name, notes.empty() ? "" : ": " + notes);
                                 auto* scene = CCScene::get();
                                 if (updateAnywhere || (scene && scene->getChildByID("MenuLayer"))) {
                                     showUpdatePopup();
@@ -12022,7 +13525,7 @@ namespace {
             }
             auto res = web::WebRequest()
                 .timeout(std::chrono::seconds(10))
-                .userAgent("ClickBeforeFrames")
+                .userAgent("FrameWave")
                 .header("Accept", "application/vnd.github+json")
                 .getSync(RELEASE_API);
             if (!res.ok()) {
@@ -12045,7 +13548,7 @@ namespace {
                 // a release named something else: the version inside its .geode decides
                 auto file = web::WebRequest()
                     .timeout(std::chrono::seconds(60))
-                    .userAgent("ClickBeforeFrames")
+                    .userAgent("FrameWave")
                     .followRedirects(true)
                     .getSync(url);
                 if (!file.ok()) {
@@ -12095,7 +13598,7 @@ class $modify(BufMenuLayer, MenuLayer) {
             return true;
         }
         auto* item = CCMenuItemSpriteExtra::create(sprite, this, menu_selector(BufMenuLayer::onBufferMenu));
-        item->setID("click-before-frames-button"_spr);
+        item->setID("framewave-button"_spr);
         if (auto* bottom = this->getChildByID("bottom-menu")) {
             bottom->addChild(item);
             bottom->updateLayout();
@@ -12130,6 +13633,15 @@ class $modify(BufBaseGameLayer, GJBaseGameLayer) {
     }
 
     void update(float dt) {
+        // v3.3: the stream overlay runs off the real percentage, every frame of a level
+        if (!buf.simulating) {
+            if (auto* pl = typeinfo_cast<PlayLayer*>(this)) {
+                streamui::onProgress(static_cast<float>(pl->getCurrentPercent()));
+                // parented to the PlayLayer itself (like the watermark and the console), which is the
+                // layer that is in raw screen pixels: same as every other overlay in this mod
+                streamui::tick(pl, dt);
+            }
+        }
         // test 93: the setting is read twice a second, not every frame
         static int tps = 240;
         static int tpsAge = 1000;

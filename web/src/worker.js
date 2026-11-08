@@ -1,4 +1,4 @@
-// Click Before Frames: online counter + website.
+// FrameWave: online counter + website.
 //
 //   POST /api/ping      the mod, every 90 s: { id, platform, version } (anonymous random id)
 //   GET  /api/stats     the website: online / offline / total, by platform and version
@@ -415,9 +415,9 @@ async function adminPage(request, env) {
        </form>`;
   const meta = env.FILES ? await env.FILES.get("latest-meta", "json") : null;
   return new Response(
-    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CBF admin</title>
+    `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FrameWave admin</title>
      <body style="font-family:system-ui;background:#0c0a1a;color:#eee;padding:24px;max-width:640px;margin:auto">
-     <h1>Click Before Frames: upload a version</h1>
+     <h1>FrameWave: upload a version</h1>
      <p>Now online: <b>${meta ? meta.version : "nothing yet"}</b></p>${body}<p><a href="/" style="color:#a66bff">Back to the site</a></p></body>`,
     { headers: { "Content-Type": "text/html; charset=utf-8" } }
   );
@@ -493,7 +493,7 @@ async function linkPage(request, env) {
      <style>body{font-family:system-ui;background:#0c0a1a;color:#eee;padding:24px;max-width:560px;margin:auto}
      .btn{display:inline-block;background:#5865f2;color:#fff;border:0;border-radius:999px;padding:10px 18px;font-size:15px;text-decoration:none;cursor:pointer}
      a{color:#a66bff}</style>
-     <h1>Click Before Frames</h1>${body}<p><a href="/">Back to the site</a></p>`,
+     <h1>FrameWave</h1>${body}<p><a href="/">Back to the site</a></p>`,
     { headers: { "Content-Type": "text/html; charset=utf-8" } }
   );
 }

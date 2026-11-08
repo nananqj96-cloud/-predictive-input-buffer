@@ -6,12 +6,58 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v3.1.0",
+	"version": "v3.3.4",
 	"id": "basu.input-buffer",
-	"name": "Click Before Frames",
+	"name": "FrameWave",
 	"developer": "BASU",
 	"description": "Trajectory-based input buffer: delays early clicks/releases by up to 8+ frames, with orb, pad and portal-aware prediction. github.com/raresdalas1009/-predictive-input-buffer",
 	"settings": {
+		"stream-chat": {
+			"type": "bool",
+			"name": "Stream: chat overlay",
+			"description": "Show the chat panel on top of the level. Its own page in the menu (Stream tab) has the rest.",
+			"default": true
+		},
+		"stream-viewers": {
+			"type": "bool",
+			"name": "Stream: viewer counter",
+			"description": "Show the live viewer count next to the chat.",
+			"default": true
+		},
+		"stream-gifts": {
+			"type": "bool",
+			"name": "Stream: donation alerts",
+			"description": "Show donation alerts on the middle right of the screen. All of them are simulated: no money moves.",
+			"default": true
+		},
+		"stream-heart": {
+			"type": "bool",
+			"name": "Stream: heart rate monitor",
+			"description": "Show the BPM monitor on the right. The numbers react to your real percentage.",
+			"default": true
+		},
+		"stream-tts": {
+			"type": "bool",
+			"name": "Stream: read donations out loud",
+			"description": "Speak each donation alert on macOS and iOS (a worker thread, so gameplay never freezes). Silent on Windows and Android.",
+			"default": false
+		},
+		"stream-participants": {
+			"type": "int",
+			"name": "Stream: chat participants",
+			"description": "How many different accounts type in chat (1-5000).",
+			"default": 100,
+			"min": 1,
+			"max": 5000
+		},
+		"stream-speed": {
+			"type": "float",
+			"name": "Stream: messages per second",
+			"description": "How fast the chat moves at a normal moment; exciting parts of a run speed it up.",
+			"default": 6.0,
+			"min": 0.2,
+			"max": 60.0
+		},
 		"custom-ticks": {
 			"type": "int",
 			"name": "Custom stage: max delay (ticks)",
@@ -407,23 +453,38 @@
 			"description": "Draws the path autoplay plans (and its inputs) on the level. Off for clean showcase recordings; autoplay plays the same either way.",
 			"default": false
 		},
+		"black-hole-ui": {
+			"type": "bool",
+			"name": "Black Hole UI (experimental)",
+			"description": "Changes the whole window: a black hole with a lensed accretion disk that slowly turns, a rotating event horizon, the star field bending into it, and a deep-space glass look. Everything else works the same.",
+			"default": false
+		},
+		"watermark": {
+			"type": "bool",
+			"name": "In-Game Watermark",
+			"description": "Shows \"FrameWave | stage\" in the bottom left corner while the buffer is on (never in practice mode). Off by default: turn it on if you want recordings to show the mod was on.",
+			"default": false
+		},
 		"autoplay-label": {
 			"type": "string",
 			"name": "Autoplay Label",
 			"description": "The AUTOPLAY label is always on screen while autoplay plays, so a recording can't pass as a real run. Big: at the top. Small: a small see-through label in the bottom corner, for showcases.",
 			"default": "Big",
-			"one-of": ["Big", "Small"]
+			"one-of": [
+				"Big",
+				"Small"
+			]
 		},
 		"global-brain": {
 			"type": "bool",
 			"name": "Global Brain",
-			"description": "When autoplay finishes a level from its start, the run is shared with the Click Before Frames server (the level, its exact version, your TPS and the button presses; nothing about you), and autoplay plays runs other games finished before looking on Hyperbolus. Off: nothing is sent or used.",
+			"description": "When autoplay finishes a level from its start, the run is shared with the FrameWave server (the level, its exact version, your TPS and the button presses; nothing about you), and autoplay plays runs other games finished before looking on Hyperbolus. Off: nothing is sent or used.",
 			"default": true
 		},
 		"online-players": {
 			"type": "bool",
 			"name": "Show Online Players",
-			"description": "Shows how many Click Before Frames players are online in the window's footer. To count you, every 90 seconds the game sends the Click Before Frames server an anonymous random id, your device type and the mod's version. No name, account, level or gameplay. Turn it off and nothing is sent.",
+			"description": "Shows how many FrameWave players are online in the window's footer. To count you, every 90 seconds the game sends the FrameWave server an anonymous random id, your device type and the mod's version. No name, account, level or gameplay. Turn it off and nothing is sent.",
 			"default": true
 		},
 		"check-updates": {
@@ -528,6 +589,10 @@
 			"exo2": {
 				"path": "resources/fonts/Exo2.ttf",
 				"size": 64
+			},
+			"pusab": {
+				"path": "resources/fonts/Pusab.otf",
+				"size": 72
 			}
 		}
 	},
