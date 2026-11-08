@@ -1363,15 +1363,20 @@ namespace streamui {
                 if (!r.used || !r.node || !r.node->isVisible()) {
                     continue;
                 }
+                // getString() is a plain char const*, not a std::string, in this SDK
+                auto hasText = [](CCLabelBMFont* l) {
+                    char const* str = l ? l->getString() : nullptr;
+                    return l && str && *str != '\0';
+                };
                 bool bodyBad = false;
                 for (int i = 0; i < 3; ++i) {
                     bool shouldShow = i < static_cast<int>(r.view.wrapped.size());
-                    bool shows = r.body[i] && r.body[i]->isVisible() && !r.body[i]->getString().empty();
+                    bool shows = r.body[i] && r.body[i]->isVisible() && hasText(r.body[i]);
                     if (shouldShow && !shows && !r.view.wrapped[static_cast<size_t>(i)].empty()) {
                         bodyBad = true;
                     }
                 }
-                bool userBad = r.user && r.user->getString().empty();
+                bool userBad = r.user && !hasText(r.user);
                 if (bodyBad || userBad) {
                     paintRow(r, r.view, O.chat->getContentSize().width);
                 }
