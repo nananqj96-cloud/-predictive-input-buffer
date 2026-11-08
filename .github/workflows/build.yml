@@ -77,11 +77,11 @@ jobs:
           fi
           cp "$FILE" "framewave-$VERSION.geode"
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          NOTES="Built from ${GITHUB_REF_NAME} at ${GITHUB_SHA:0:7}. Install with Geode: drag the .geode onto the game, or use Geode > Install mod from file."
+          NOTES="$NOTES"$'\n\n'"$(tail -n 3 README.md)"
           gh release create "$TAG" "framewave-$VERSION.geode" --prerelease \
-            --title "FrameWave $VERSION (preview, ${GITHUB_REF_NAME})" \
-            --notes "Built from ${GITHUB_REF_NAME} at ${GITHUB_SHA:0:7}. Install with Geode: drag the .geode onto the game (or Geode > Install mod from file).
-
-$(tail -n 3 README.md)"
+            --title "FrameWave $VERSION (preview)" \
+            --notes "$NOTES"
 
   release:
     name: Publish release
