@@ -10755,7 +10755,7 @@ private:
             spark->setPosition({ 120.f + static_cast<float>(std::rand() % 90), static_cast<float>(std::rand() % 70) - 35.f });
             turn->addChild(spark);
             turn->runAction(CCSequence::create(CCRotateBy::create(1.7f, -200.f), CCRemoveSelf::create(), nullptr));
-            spark->runAction(CCSequence::create(CCSpawn::create(CCScaleTo::create(1.7f, 0.1f), CCFadeOut::create(1.7f), nullptr), nullptr));
+            spark->runAction(CCSpawn::create(CCScaleTo::create(1.7f, 0.1f), CCFadeOut::create(1.7f), nullptr));
         }
         m_shootTimer -= dt;
         if (m_shootTimer <= 0.f && m_sky && !m_light && !blackHole()) {
