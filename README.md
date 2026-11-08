@@ -67,9 +67,29 @@ Moving it: pick a corner in the Stream tab, or choose `Custom Position` and drag
 Note: the chat, the viewers, the donations and the heartbeat are all simulated for looks. Nothing is sent anywhere and no money is involved.
 
 ## Keys
-6 cycle stage | 7 menu | F8 copy the console log | F9 open/close the in-game console | F10 path view | F11 forget this level's memory
+6 cycle stage | 7 menu | F8 copy the console log | F9 open/close the in-game console | F10 path view | F11 forget this level's memory | P macro playback toggle | O spam corrector toggle | I spam corrector panic
 
 Practice use only; do not use for verified or leaderboard runs.
+
+## v3.4: Macro Player and Alternate Spam Corrector
+
+### Macro Player (new "Macros" tab)
+A new **Macros** tab lets you play replay files directly, frame-accurate, in-game. Drop `.gdr2`, `.mhr`, `.xd`, or `.gdr` files into the macros folder and they appear in the list. Each macro gets its own keybind (press **bind**, then a key in-game) and an **arm** button. Press the macro's key during a level and it plays the recorded inputs through the game's own button path, so physics sees them as real presses. Supports both players on dual levels.
+
+- **Formats**: GDR2 (Mega Hack, xdBot, Eclipse), MHR (Mega Hack replay JSON and binary), xdBot text, and the existing GDR v1 parser.
+- **Per-macro keybinds**: any macro can be bound to any key. Conflicts are shown in red.
+- **Global toggle**: keybind P turns macro playback on/off for the armed macro.
+- **File list**: shows input count, fps, and parse errors. Refresh button rescans the folder.
+- **Persistence**: the macro list and keybinds are saved to `macro-player/list.txt` in the mod's save folder.
+
+### Alternate Spam Corrector
+Alternate spamming (wave/ship flapping between two inputs) is fast enough that the normal buffer can't keep up. The corrector detects it from the press timing, then takes over: it blocks your raw inputs and generates clicks at a user-set rate so physics stays consistent. A panic key stops it at once.
+
+- **Detection**: watches press gaps against a sensitivity-based threshold. A fast alternating pattern held for the detect time triggers the corrector.
+- **ACTIVE**: blocks raw inputs (injected clicks pass through), generates press+release pairs at the set clicks/sec.
+- **RELEASE**: when the player stops, waits the release time, then lets go and unblocks.
+- **Reset**: on death, pause, level exit, and level complete.
+- **Settings**: enable toggle, clicks/sec (1-200), detect time (0.2-2.0s), release time (0.2-2.0s), sensitivity (fast/medium/eager).
 
 ## v3.0
 - **Autoplay** (for showcases, test mode: nothing is saved as progress and AUTOPLAY stays on screen): plans a route up to 10 s ahead while it plays, a pathfinder for wave and ship, and it learns from its deaths.

@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v3.3.7",
+	"version": "v3.4.0",
 	"id": "basu.input-buffer",
 	"name": "FrameWave",
 	"developer": "BASU",
@@ -560,6 +560,44 @@
 				"F11"
 			]
 		},
+		"spam-correct": {
+			"type": "bool",
+			"name": "Alternate Spam Corrector",
+			"description": "Detects alternating-input spam (wave/ship flapping) from press timing, then blocks your raw inputs and generates clicks at the set rate so physics stays consistent. A panic key stops it at once. Resets on death, pause and level exit.",
+			"default": false
+		},
+		"spam-cps": {
+			"type": "int",
+			"name": "Spam corrector: clicks per second",
+			"description": "How many clicks per second the corrector generates while it takes over. Higher = faster, but too high can feel robotic.",
+			"default": 30,
+			"min": 1,
+			"max": 200
+		},
+		"spam-detect": {
+			"type": "float",
+			"name": "Spam corrector: detect time (s)",
+			"description": "How long the alternating-spam pattern must hold before the corrector takes over.",
+			"default": 0.5,
+			"min": 0.2,
+			"max": 2.0
+		},
+		"spam-release": {
+			"type": "float",
+			"name": "Spam corrector: release time (s)",
+			"description": "How long the player must stay silent before the corrector lets go and unblocks your inputs.",
+			"default": 0.5,
+			"min": 0.2,
+			"max": 2.0
+		},
+		"spam-sensitivity": {
+			"type": "int",
+			"name": "Spam corrector: sensitivity",
+			"description": "How easily the pattern triggers. Fast = only very rapid alternating presses. Medium = normal. Eager = catches more.",
+			"default": 2,
+			"min": 1,
+			"max": 3
+		},
 		"tps": {
 			"type": "int",
 			"name": "Physics TPS",
@@ -575,6 +613,33 @@
 				"arrow-step": 10,
 				"big-arrows": false
 			}
+		},
+		"bind-macro-toggle": {
+			"type": "keybind",
+			"name": "Key: macro playback toggle",
+			"description": "Toggles macro playback on/off. Works inside a level and in the menu.",
+			"category": "gameplay",
+			"default": [
+				"KeyP"
+			]
+		},
+		"bind-spam-correct": {
+			"type": "keybind",
+			"name": "Key: spam corrector toggle",
+			"description": "Toggles the alternate spam corrector on/off. Works inside a level and in the menu.",
+			"category": "gameplay",
+			"default": [
+				"KeyO"
+			]
+		},
+		"bind-spam-panic": {
+			"type": "keybind",
+			"name": "Key: spam corrector panic",
+			"description": "Forces the spam corrector to stop immediately, unblocks your inputs, and goes back to idle.",
+			"category": "gameplay",
+			"default": [
+				"KeyI"
+			]
 		}
 	},
 	"resources": {

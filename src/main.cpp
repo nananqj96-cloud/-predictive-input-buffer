@@ -61,6 +61,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include "macro_player.hpp"
+#include "spam_correct.hpp"
+
 using namespace geode::prelude;
 
 namespace {
@@ -9765,11 +9768,12 @@ class BufferMenu : public geode::Popup {
         { "save-ding", "Ding On Save", "A sound when a click is saved" },
         { "performance-mode", "Performance Mode", "Lighter searches for weak phones" },
     };
-    static constexpr char const* TABS[] = { "Log", "Stage", "Modes", "Tools", "Stream", "Account" };  // v3.3: Stream
-    static constexpr int TAB_ACCOUNT = 5;
-    static constexpr int TAB_TUNING = 6;
-    static constexpr int TAB_SETTINGS = 7;
+    static constexpr char const* TABS[] = { "Log", "Stage", "Modes", "Tools", "Stream", "Macros", "Account" };  // v3.4: Macros
+    static constexpr int TAB_ACCOUNT = 6;
+    static constexpr int TAB_TUNING = 7;
+    static constexpr int TAB_SETTINGS = 8;
     static constexpr int TAB_STREAM = 4;
+    static constexpr int TAB_MACROS = 5;
     // stage buttons: Off, then the stages from small to big, then Custom (per-mode frames)
     static constexpr int STAGE_BTN[] = { 7, 0, 1, 2, 3, 4, 5 };
     static constexpr char const* STAGE_LABEL[] = { "Off", "0.5f", "1f", "2f", "4f", "6f", "8f" };
@@ -11042,6 +11046,92 @@ private:
         streamui::clearChat();
     }
 
+    // ---- v3.4 macro player handlers ----
+    void onMacroRefresh(CCObject*) {
+        macroplayer::Player::get().refreshList();
+        macroplayer::Player::get().save();
+        rebuildPage();
+    }
+
+    void onMacroBind(CCObject* sender) {
+        int idx = sender->getTag();
+        macroplayer::Player::get().captureIdx = idx;
+        say("press a key to bind it to this macro");
+        rebuildPage();
+    }
+
+    void onMacroArm(CCObject* sender) {
+        int idx = sender->getTag();
+        macroplayer::Player::get().arm(idx);
+        say("macro armed: {}", macroplayer::Player::get().keyOf(idx));
+    }
+
+    void onMacroRemove(CCObject* sender) {
+        int idx = sender->getTag();
+        macroplayer::Player::get().removeEntry(idx);
+        rebuildPage();
+    }
+
+    void onMacroToggle(CCObject*) {
+        auto& p = macroplayer::Player::get();
+        if (p.enabled) {
+            p.stop();
+            say("macro playback off");
+        } else if (p.activeIdx >= 0) {
+            p.toggle();
+            say("macro playback on");
+        }
+        rebuildPage();
+    }
+
+    // ---- v3.4 spam corrector handlers ----
+    void onSpamCorrect(CCObject*) {
+        auto& c = spamcorrect::Corrector::get();
+        c.enabled = !c.enabled;
+        Mod::get()->setSavedValue("spam-correct", c.enabled);
+        say("alternate spam corrector {}", c.enabled ? "on" : "off");
+        if (!c.enabled) {
+            c.panic();
+        }
+        rebuildPage();
+    }
+
+    void onSpamCps(CCObject* sender) {
+        auto& c = spamcorrect::Corrector::get();
+        int step = sender->getTag() > 0 ? 5 : -5;
+        c.cps = std::clamp(c.cps + step, 1, 200);
+        Mod::get()->setSavedValue("spam-cps", c.cps);
+        rebuildPage();
+    }
+
+    void onSpamDetect(CCObject* sender) {
+        auto& c = spamcorrect::Corrector::get();
+        int step = sender->getTag() > 0 ? 1 : -1;
+        c.detectTime = std::clamp(c.detectTime + step * 0.1f, 0.2f, 2.0f);
+        Mod::get()->setSavedValue("spam-detect", c.detectTime);
+        rebuildPage();
+    }
+
+    void onSpamRelease(CCObject* sender) {
+        auto& c = spamcorrect::Corrector::get();
+        int step = sender->getTag() > 0 ? 1 : -1;
+        c.releaseTime = std::clamp(c.releaseTime + step * 0.1f, 0.2f, 2.0f);
+        Mod::get()->setSavedValue("spam-release", c.releaseTime);
+        rebuildPage();
+    }
+
+    void onSpamSensitivity(CCObject* sender) {
+        auto& c = spamcorrect::Corrector::get();
+        c.sensitivity = std::clamp(c.sensitivity + (sender->getTag() > 0 ? 1 : -1), 1, 3);
+        Mod::get()->setSavedValue("spam-sensitivity", c.sensitivity);
+        rebuildPage();
+    }
+
+    void onSpamPanic(CCObject*) {
+        spamcorrect::Corrector::get().panic();
+        say("alternate spam corrector: stopped");
+    }
+
     void onStreamTtsClear(CCObject*) {
         streamui::ttsClear();
         rebuildPage();
@@ -11534,6 +11624,149 @@ private:
         rebuildPage();
     }
 
+    // ---- v3.4: the macros tab ----
+    void pageMacros() {
+        pageTitle("Macros");
+        float x = contentX(), w = contentW(), top = contentTop();
+        auto& player = macroplayer::Player::get();
+        player.load();
+        player.refreshList();
+
+        // refresh button, top right
+        button(m_pageMenu, "Refresh", menu_selector(BufferMenu::onMacroRefresh),
+            { W - 40.f - 60.f, H - HEAD / 2.f }, 60.f, false, 0, 15.f);
+
+        float colW = (w - 6.f) / 2.f;
+
+        // global toggle
+        {
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            roundRect(d, { x + 4.f, top - 33.f, colW - 8.f, 18.f }, 6.f, rowFill(), 0.4f, col(m_t.main, 0.25f));
+            label(m_page, "Macro Playback", 0.44f, player.enabled ? m_text : m_muted, { x + 12.f, top - 24.f }, { 0.f, 0.5f });
+            if (player.enabled && player.activeIdx >= 0) {
+                label(m_page, "active: " + player.keyOf(player.activeIdx), 0.32f, m_cyan, { x + colW * 0.55f, top - 24.f }, { 0.f, 0.5f });
+            }
+            CCDrawNode* sw = nullptr;
+            switchItem({ x + colW - 23.f, top - 24.f }, player.enabled, menu_selector(BufferMenu::onMacroToggle), 0, &sw);
+        }
+
+        // macro list
+        float y = top - 50.f;
+        int shown = 0;
+        for (int i = 0; i < static_cast<int>(player.entries.size()) && shown < 5; ++i, ++shown) {
+            auto& e = player.entries[i];
+            // row background
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            float rowH = 22.f;
+            bool isActive = (i == player.activeIdx);
+            roundRect(d, { x + 4.f, y - rowH + 2.f, colW - 8.f, rowH - 4.f }, 5.f,
+                isActive ? col(m_t.main, 0.15f) : rowFill(), 0.35f,
+                isActive ? col(m_cyan, 0.5f) : col(m_t.main, 0.15f));
+
+            // filename
+            label(m_page, e.file, 0.38f, e.loaded ? m_text : m_muted, { x + 10.f, y - rowH / 2.f - 1.f }, { 0.f, 0.5f })
+                ->limitLabelWidth(colW * 0.45f, 0.38f, 0.2f);
+
+            // keybind or bind button
+            if (!e.key.empty()) {
+                int conflict = player.findByKey(e.key);
+                bool hasConflict = (conflict >= 0 && conflict != i);
+                label(m_page, e.key, 0.42f, hasConflict ? ccColor3B { 235, 80, 90 } : m_cyan,
+                    { x + colW * 0.5f, y - rowH / 2.f - 1.f }, { 0.5f, 0.5f });
+                if (hasConflict) {
+                    label(m_page, "conflict", 0.26f, ccColor3B { 235, 80, 90 },
+                        { x + colW * 0.5f + 24.f, y - rowH / 2.f - 1.f }, { 0.f, 0.5f });
+                }
+            } else {
+                button(m_pageMenu, "bind", menu_selector(BufferMenu::onMacroBind),
+                    { x + colW * 0.5f, y - rowH / 2.f }, 36.f, false, i, 14.f);
+            }
+
+            // arm button
+            button(m_pageMenu, "arm", menu_selector(BufferMenu::onMacroArm),
+                { x + colW - 70.f, y - rowH / 2.f }, 36.f, isActive, i, 14.f);
+
+            // remove button
+            button(m_pageMenu, "x", menu_selector(BufferMenu::onMacroRemove),
+                { x + colW - 28.f, y - rowH / 2.f }, 20.f, false, i, 14.f);
+
+            // error / status
+            if (!e.loaded && !e.error.empty()) {
+                label(m_page, e.error, 0.24f, ccColor3B { 235, 160, 80 },
+                    { x + 10.f, y - rowH + 1.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.24f, 0.15f);
+            } else if (e.loaded) {
+                label(m_page, fmt::format("{} inputs, {:.0f} fps", e.data.inputs.size(), e.data.fps),
+                    0.24f, m_muted, { x + 10.f, y - rowH + 1.f }, { 0.f, 0.5f });
+            }
+
+            y -= rowH + 2.f;
+        }
+
+        if (player.entries.empty()) {
+            label(m_page, "No macros found. Put .gdr2, .mhr, .xd, or .gdr files in the macros folder.",
+                0.36f, m_muted, { x + 10.f, y - 10.f }, { 0.f, 0.5f })->limitLabelWidth(colW - 20.f, 0.36f, 0.2f);
+        }
+
+        // right column: spam corrector
+        float rx = x + colW + 6.f;
+        card({ rx, FOOT + 6.f, colW, top - FOOT - 6.f }, "Alternate Spam", "wave / ship spam");
+        float ry = top - 30.f;
+        auto& sc = spamcorrect::Corrector::get();
+
+        // enable toggle
+        {
+            auto* d = CCDrawNode::create();
+            m_page->addChild(d, 1);
+            roundRect(d, { rx + 4.f, ry - 9.f, colW - 8.f, 18.f }, 6.f, rowFill(), 0.4f, col(m_t.main, 0.25f));
+            label(m_page, "Enabled", 0.44f, sc.enabled ? m_text : m_muted, { rx + 12.f, ry }, { 0.f, 0.5f });
+            CCDrawNode* sw = nullptr;
+            switchItem({ rx + colW - 23.f, ry }, sc.enabled, menu_selector(BufferMenu::onSpamCorrect), 0, &sw);
+            ry -= 22.f;
+        }
+
+        // state indicator
+        const char* stateName[] = { "idle", "detecting", "active (blocked)", "releasing" };
+        label(m_page, "State: " + std::string(stateName[static_cast<int>(sc.state)]),
+            0.34f, sc.state == spamcorrect::Corrector::State::Active ? ccColor3B { 255, 160, 60 } : m_muted,
+            { rx + 12.f, ry }, { 0.f, 0.5f });
+        ry -= 18.f;
+
+        // CPS
+        label(m_page, "Clicks/sec", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
+        label(m_page, std::to_string(sc.cps), 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamCps), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamCps), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        ry -= 18.f;
+
+        // detect time
+        label(m_page, "Detect time", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.1f}s", sc.detectTime), 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamDetect), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamDetect), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        ry -= 18.f;
+
+        // release time
+        label(m_page, "Release time", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.1f}s", sc.releaseTime), 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamRelease), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamRelease), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        ry -= 18.f;
+
+        // sensitivity
+        label(m_page, "Sensitivity", 0.40f, m_text, { rx + 12.f, ry }, { 0.f, 0.5f });
+        const char* sensName[] = { "", "fast", "medium", "eager" };
+        label(m_page, sensName[sc.sensitivity], 0.36f, m_cyan, { rx + colW - 50.f, ry }, { 1.f, 0.5f });
+        button(m_pageMenu, "-", menu_selector(BufferMenu::onSpamSensitivity), { rx + colW - 30.f, ry }, 16.f, false, -1, 14.f);
+        button(m_pageMenu, "+", menu_selector(BufferMenu::onSpamSensitivity), { rx + colW - 14.f, ry }, 16.f, false, 1, 14.f);
+        ry -= 22.f;
+
+        // panic button
+        button(m_pageMenu, "Panic (force stop)", menu_selector(BufferMenu::onSpamPanic),
+            { rx + colW / 2.f, ry }, colW - 14.f, false, 0, 16.f, ccColor3B { 235, 80, 90 });
+    }
+
     void pageAccount() {
         pageTitle("Account");
         float x = contentX(), w = contentW(), top = contentTop();
@@ -11718,6 +11951,7 @@ private:
             case 2: pageModes(); break;
             case 3: pageTools(); break;
             case TAB_STREAM: pageStream(); break;
+            case TAB_MACROS: pageMacros(); break;
             case TAB_ACCOUNT: pageAccount(); break;
             case TAB_TUNING: pageTuning(); break;
             case TAB_SETTINGS: pageSettings(); break;
@@ -12106,6 +12340,7 @@ private:
     }
 
     void onPauseButton(CCObject*) {
+        spamcorrect::Corrector::get().reset();  // v3.4
         bool on = !Mod::get()->getSavedValue<bool>("pause-button", true);
         Mod::get()->setSavedValue("pause-button", on);
         say("pause menu button {}", on ? "on" : "off (open the menu with its key)");
@@ -12342,6 +12577,13 @@ protected:
         applyLook();
         buildFrame();
         rebuildPage();
+        // v3.4: load spam corrector settings
+        auto& sc = spamcorrect::Corrector::get();
+        sc.enabled = Mod::get()->getSavedValue<bool>("spam-correct", false);
+        sc.cps = std::clamp(Mod::get()->getSavedValue<int>("spam-cps", 30), 1, 200);
+        sc.detectTime = std::clamp(Mod::get()->getSavedValue<float>("spam-detect", 0.5f), 0.2f, 2.0f);
+        sc.releaseTime = std::clamp(Mod::get()->getSavedValue<float>("spam-release", 0.5f), 0.2f, 2.0f);
+        sc.sensitivity = std::clamp(Mod::get()->getSavedValue<int>("spam-sensitivity", 2), 1, 3);
         // v3.3: the small "menu" chip on the overlay opens this window (and hides itself while the
         // window is open, so it never sits under the mouse)
         streamui::setChipAction([]() { BufferMenu::open(); });
@@ -12485,6 +12727,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
+        spamcorrect::Corrector::get().reset();  // v3.4
         // (v3.0 test 9: the game "kills" you with its hidden anticheat spike in the first ticks of
         // every attempt; that isn't a death, and it made autoplay learn nothing)
         // test 76: player 2 dying in a dual part is a death too (tests 27-75 didn't see it: no log, and a
@@ -12784,6 +13027,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void onQuit() {
+        spamcorrect::Corrector::get().reset();  // v3.4
         streamui::leaveLevel();  // v3.3: release the overlay tree while the level node is still alive
         benchFinish();
         benchFlush();
@@ -12800,6 +13044,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
+        spamcorrect::Corrector::get().reset();  // v3.4
         if (!buf.simulating) {
             streamui::onComplete();
         }
@@ -12825,6 +13070,7 @@ class $modify(BufPlayLayer, PlayLayer) {
     }
 
     void resetLevel() {
+        spamcorrect::Corrector::get().reset();  // v3.4
         // v3.0 test 9: an attempt that ended in a real death (the game restarts with you dead)
         // test 81: or player 2 died in a dual part (player 1 isn't dead then)
         bool p2Died = m_gameState.m_isDualMode && m_player2 && m_player2->m_isDead;
@@ -13277,6 +13523,38 @@ class $modify(BufPlayerObject, PlayerObject) {
 // Only act inside a level.
 namespace {
     void keyAction(int action) {
+        // cases 6-8 (macro toggle, spam corrector, spam panic) work everywhere
+        if (action >= 6) {
+            switch (action) {
+                case 6:
+                    // macro toggle — works in-game and in menu
+                    auto& mp = macroplayer::Player::get();
+                    if (mp.enabled) {
+                        mp.stop();
+                        say("macro playback off");
+                    } else if (mp.activeIdx >= 0) {
+                        mp.toggle();
+                        say("macro playback on");
+                    }
+                    break;
+                case 7:
+                    // spam corrector toggle — works in-game and in menu
+                    auto& sc2 = spamcorrect::Corrector::get();
+                    sc2.enabled = !sc2.enabled;
+                    Mod::get()->setSavedValue("spam-correct", sc2.enabled);
+                    say("alternate spam corrector {}", sc2.enabled ? "on" : "off");
+                    if (!sc2.enabled) {
+                        sc2.panic();
+                    }
+                    break;
+                case 8:
+                    // spam panic
+                    spamcorrect::Corrector::get().panic();
+                    say("alternate spam corrector: stopped");
+                    break;
+            }
+            return;
+        }
         auto* layer = GameManager::get()->m_playLayer;
         if (!layer) {
             return;
@@ -13316,8 +13594,8 @@ namespace {
     }
 
     void setupKeybinds() {
-        char const* binds[] = { "bind-stage", "bind-menu", "bind-export", "bind-console", "bind-path", "bind-forget" };
-        for (int i = 0; i < 6; ++i) {
+        char const* binds[] = { "bind-stage", "bind-menu", "bind-export", "bind-console", "bind-path", "bind-forget", "bind-macro-toggle", "bind-spam-correct", "bind-spam-panic" };
+        for (int i = 0; i < 9; ++i) {
             listenForKeybindSettingPresses(binds[i], [i](Keybind const&, bool down, bool repeat, double) {
                 if (down && !repeat) {
                     keyAction(i);
@@ -13325,6 +13603,20 @@ namespace {
                 return false;
             });
         }
+
+        // v3.4: per-macro keybinds — capture key presses and check if any macro is bound to them.
+        // Only in-game (play layer exists), so menu keybinds don't accidentally trigger macros.
+        KeyboardInputEvent{}.listen([](KeyboardInputData& data) {
+            auto* layer = GameManager::get()->m_playLayer;
+            if (!layer) {
+                return false;
+            }
+            if (data.action != KeyboardInputData::Action::Press) {
+                return false;
+            }
+            macroplayer::Player::get().onKeyPress(geode::Keybind(data.key, data.modifiers).toString());
+            return false;
+        }).leak();
     }
 
     // v2.81 update check: once per game start, reads the version in the public repo's mod.json
@@ -13646,6 +13938,24 @@ class $modify(BufBaseGameLayer, GJBaseGameLayer) {
         if (autoplay.active && !buf.simulating && static_cast<GJBaseGameLayer*>(autoplay.layer) == static_cast<GJBaseGameLayer*>(this)) {
             macroStep(autoplay.layer);
         }
+        // v3.4: macro player and spam corrector run on the game's step
+        auto* pl = typeinfo_cast<PlayLayer*>(this);
+        if (pl && !buf.simulating) {
+            int now = macroNow(pl);
+            double tps = settingTps();
+            macroplayer::Player::get().tick(pl, now, tps, [&](bool down, bool isP2) {
+                if (isP2) {
+                    buf.injecting = true;
+                    pl->handleButton(down, 1, false);
+                    buf.injecting = false;
+                } else {
+                    sendButton(pl, down);
+                }
+            });
+            spamcorrect::Corrector::get().tick(dt, tickCount, [&](bool down) {
+                sendButton(pl, down);
+            });
+        }
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
     }
 
@@ -13921,6 +14231,13 @@ class $modify(BufBaseGameLayer, GJBaseGameLayer) {
     }
 
     void handleButton(bool down, int button, bool isPlayer1) {
+        // v3.4: alternate spam corrector watches raw inputs and blocks them when active
+        if (!buf.injecting) {
+            spamcorrect::Corrector::get().onInput(down, tickCount);
+            if (spamcorrect::Corrector::get().shouldBlock()) {
+                return;
+            }
+        }
         // v3.0: while autoplay plays, your own clicks don't reach the game (Take Over: they do,
         // and the bot steps back for a moment after each one)
         if (autoplay.active && !buf.simulating && !buf.injecting) {
