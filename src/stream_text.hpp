@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace stream::text {
+namespace streamui::text {
 
     // ---- chat categories ----
     enum ChatCat : int {

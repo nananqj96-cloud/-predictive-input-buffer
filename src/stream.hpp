@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <functional>
 
-namespace stream {
+namespace streamui {
 
     struct Bot {
         std::string name;

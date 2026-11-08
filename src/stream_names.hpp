@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace stream::names {
+namespace streamui::names {
 
     // deterministic: the same seed always gives the same pool
     std::vector<std::string> generate(unsigned seed, int count);

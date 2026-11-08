@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <unordered_set>
 
-namespace stream::names {
+namespace streamui::names {
 
     namespace {
 
@@ -160,4 +160,4 @@ namespace stream::names {
         return PALETTE[h % std::size(PALETTE)];
     }
 
-}  // namespace stream::names
+}  // namespace streamui::names

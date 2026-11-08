@@ -39,7 +39,7 @@
 using namespace geode::prelude;
 using namespace cocos2d;
 
-namespace stream {
+namespace streamui {
 
     bool dirty = false;
     int publishedChat = 0;
@@ -1622,10 +1622,10 @@ namespace stream {
 
     }  // namespace
 
-}  // namespace stream
+}  // namespace streamui
 
 
-namespace stream {
+namespace streamui {
 
     namespace {
 
@@ -1839,10 +1839,10 @@ namespace stream {
         gTts.wake.notify_one();
     }
 
-}  // namespace stream
+}  // namespace streamui
 
 
-namespace stream {
+namespace streamui {
 
     // =====================================================================
     // the per-frame tick and the level events
@@ -2232,4 +2232,4 @@ namespace stream {
         return gDragging || gResizing;
     }
 
-}  // namespace stream
+}  // namespace streamui

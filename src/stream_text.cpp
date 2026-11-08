@@ -4,7 +4,7 @@
 #include <unordered_set>
 #include <cstdint>
 
-namespace stream::text {
+namespace streamui::text {
 
     namespace {
 
@@ -1111,4 +1111,4 @@ namespace stream::text {
         return v;
     }
 
-}  // namespace stream::text
+}  // namespace streamui::text
