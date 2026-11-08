@@ -145,6 +145,8 @@ namespace streamui {
             bool ecg = true;           // the cyan trace beside the heart monitor
             bool header = false;       // "GdStream" above the chat panel
             int vspread = 120;         // how far the viewer count wanders, as a % of the range
+            float headScale = 0.42f;   // "GdStream" size (PUSAB units)
+            float ecgWidth = 1.0f;     // trace thickness multiplier
             float scale = 1.f;
         };
 
@@ -181,7 +183,9 @@ namespace streamui {
             S.ecg = m.getSavedValue<bool>("stream-ecg", true);
             S.header = m.getSavedValue<bool>("stream-header", false);
             S.vspread = std::clamp(m.getSavedValue<int>("stream-vspread", 120), 20, 400);
-            S.scale = std::clamp(m.getSavedValue<float>("stream-scale", 1.f), 0.6f, 2.2f);
+            S.headScale = std::clamp(m.getSavedValue<float>("stream-head-scale", 0.42f), 0.10f, 1.20f);
+            S.ecgWidth = std::clamp(m.getSavedValue<float>("stream-ecg-width", 1.f), 0.3f, 2.5f);
+            S.scale = std::clamp(m.getSavedValue<float>("stream-scale", 1.f), 0.25f, 3.f);
         }
 
         // =====================================================================
@@ -331,16 +335,22 @@ namespace streamui {
         // =====================================================================
 
         CCLabelBMFont* probe(char const* fnt) {
-            static CCLabelBMFont* chat = nullptr;
-            static CCLabelBMFont* head = nullptr;
-            auto get = [&](CCLabelBMFont*& slot) {
-                if (!slot) {
-                    slot = CCLabelBMFont::create("Ag", fnt);
-                    slot->retain();
+            // one probe label per font: measuring with the wrong font used to make every
+            // non-chat measurement come out at whatever font happened to be asked for first
+            static std::vector<std::pair<std::string, CCLabelBMFont*>> cache;
+            for (auto& e : cache) {
+                if (e.first == fnt) {
+                    return e.second;
                 }
-                return slot;
-            };
-            return std::strcmp(fnt, "chatFont.fnt") == 0 ? get(chat) : get(head);
+            }
+            auto* label = CCLabelBMFont::create("Ag", fnt);
+            if (!label) {
+                // a font that isn't there: fall back to the game's own, never crash the measure
+                label = CCLabelBMFont::create("Ag", "bigFont.fnt");
+            }
+            label->retain();
+            cache.emplace_back(fnt, label);
+            return label;
         }
 
         float textW(std::string const& s, float scale, char const* fnt) {
@@ -562,6 +572,7 @@ namespace streamui {
             CCLabelBMFont* user = nullptr;
             CCLabelBMFont* body[3] = { nullptr, nullptr, nullptr };
             bool used = false;
+            LineView view;      // kept so a row can be repaired without rebuilding the panel
         };
 
         struct Gift {
@@ -638,6 +649,8 @@ namespace streamui {
             float viewerTimer = 4.f;
             float chatClock = 0.f;
             std::string lastViewers;
+            float healTimer = 1.5f;
+            float completeT = 0.f;   // seconds since the level was beaten
             std::string lastBpm;
             bool built = false;
         };
@@ -759,10 +772,14 @@ namespace streamui {
         // line. In a narrow panel the pool is filtered to lines that fit, so messages are short
         // instead of being cut with an ellipsis. A wide panel keeps the whole pool.
         bool lineFits(std::string const& body) {
-            float panelW = O.chat ? O.chat->getContentSize().width : S.width * S.scale;
-            // the row's head is the clock, the badge and a username: a pessimistic 150px, so a line
-            // that survives this test fits behind any name in the pool
-            return textW(body, 0.62f, "chatFont.fnt") <= panelW - 150.f;
+            // Two measurements, and the larger wins: the font probe, and a plain character-count
+            // estimate (~6.6px per character at this scale, generous on purpose). If the probe ever
+            // measures something odd, the estimate still keeps sane lines in the pool.
+            float panelW = O.chat ? O.chat->getContentSize().width : 300.f;
+            float budget = std::max(60.f, panelW - 150.f);
+            float measured = textW(body, 0.62f, "chatFont.fnt");
+            float estimated = static_cast<float>(body.size()) * 6.6f;
+            return std::max(measured, estimated) <= budget;
         }
 
         // the short-line index, built once per category per panel width (measuring every candidate
@@ -789,8 +806,13 @@ namespace streamui {
                 return 0;
             }
             if (cat != gBagCat || gBagPos >= gBag.size()) {
-                float panelW = O.chat ? O.chat->getContentSize().width : S.width * S.scale;
-                bool narrow = panelW < 420.f;
+                // A 300px panel fits ~28 characters of body text behind a name. Short lines are
+                // preferred there, but the filter can only ever *narrow* the pool: if it comes back
+                // with nothing (a narrow panel, a wide panel whose font measured oddly, a category
+                // with nothing short in it) the whole category is used. The chat must never go
+                // blank, so there is no path here that can leave the bag empty.
+                float panelW = O.chat ? O.chat->getContentSize().width : 0.f;
+                bool narrow = panelW >= 160.f && panelW < 420.f;
                 int widthKey = static_cast<int>(panelW);
                 if (widthKey != gShortWidth) {
                     for (auto& c : gShortCache) {
@@ -798,17 +820,16 @@ namespace streamui {
                     }
                     gShortWidth = widthKey;
                 }
-                gBag.clear();
+                gBag.assign(static_cast<size_t>(n), 0);
+                for (int i = 0; i < n; ++i) {
+                    gBag[static_cast<size_t>(i)] = t.first(cat) + i;
+                }
                 if (narrow) {
                     if (gShortCache[cat].empty()) {
                         buildShortCache(cat);
                     }
-                    gBag = gShortCache[cat];
-                }
-                if (gBag.empty()) {
-                    // a wide panel, or a category where nothing is short: use all of it
-                    for (int i = 0; i < n; ++i) {
-                        gBag.push_back(t.first(cat) + i);
+                    if (gShortCache[cat].size() >= 4) {
+                        gBag = gShortCache[cat];
                     }
                 }
                 for (size_t i = gBag.size(); i > 1; --i) {
@@ -817,7 +838,10 @@ namespace streamui {
                 gBagPos = 0;
                 gBagCat = cat;
             }
-            return gBag[gBagPos++];
+            if (gBag.empty()) {
+                return 0;   // can only happen if the category itself is empty
+            }
+            return gBag[std::min(gBagPos++, gBag.size() - 1)];
         }
 
         // $P = percentage, $A = attempt, $L = the level's name (nothing if it isn't known)
@@ -1003,17 +1027,8 @@ namespace streamui {
             }
 
             // ---------------- optional wordmark above the panel ----------------
-            // "Gd" in green then "Stream" in gold, in the game's own bitmap font, sat on the panel's
-            // top-left corner. Two labels so each half keeps its colour.
-            O.header = newNode(root, 14);
-            O.headGd = CCLabelBMFont::create("Gd", "bigFont.fnt");
-            O.headGd->setAnchorPoint({ 0.f, 0.5f });
-            O.headGd->setColor({ 88, 214, 92 });
-            O.header->addChild(O.headGd, 0);
-            O.headStream = CCLabelBMFont::create("Stream", "bigFont.fnt");
-            O.headStream->setAnchorPoint({ 0.f, 0.5f });
-            O.headStream->setColor({ 236, 186, 62 });
-            O.header->addChild(O.headStream, 0);
+            // Built on demand by buildHeader(), which needs the mod's resource path. Nothing is
+            // created here.
 
             // ---------------- chat rows ----------------
             // One clipping node for the whole stack (not one per row: 110 stencils is a lot of
@@ -1078,9 +1093,50 @@ namespace streamui {
             }
             x = std::clamp(x, 2.f, std::max(2.f, win.width - w - 2.f));
             // when the wordmark is on, the panel leaves it room instead of pushing it off screen
-            float topPad = S.header && S.chat ? 20.f : 2.f;
+            float topPad = S.header && S.chat ? 26.f : 2.f;
             y = std::clamp(y, 2.f, std::max(2.f, win.height - h - topPad));
             return { x, y, w, h };
+        }
+
+        // =====================================================================
+        // the "GdStream" wordmark
+        // =====================================================================
+        // PUSAB is the typeface Geometry Dash uses, so it is shipped with the mod and loaded through
+        // the resource path. If that ever fails on a platform or build, the game's own bitmap font
+        // is used instead: the title degrades to a different font, never to no title.
+        std::string gHeaderFont;
+        bool gHeaderFontBad = false;
+
+        char const* headerFont() {
+            if (gHeaderFontBad) {
+                return "bigFont.fnt";
+            }
+            if (gHeaderFont.empty()) {
+                std::string p = (Mod::get()->getResourcesDir() / "pusab.fnt").string();
+                if (CCFileUtils::sharedFileUtils()->isFileExist(p)) {
+                    gHeaderFont = p;
+                }
+                else {
+                    gHeaderFontBad = true;
+                    gHeaderFont = "bigFont.fnt";
+                }
+            }
+            return gHeaderFont.c_str();
+        }
+
+        void buildHeader() {
+            if (O.header || !O.root) {
+                return;
+            }
+            O.header = newNode(O.root, 14);
+            O.headGd = CCLabelBMFont::create("Gd", headerFont());
+            O.headGd->setAnchorPoint({ 0.f, 0.5f });
+            O.headGd->setColor({ 88, 214, 92 });
+            O.header->addChild(O.headGd, 0);
+            O.headStream = CCLabelBMFont::create("Stream", headerFont());
+            O.headStream->setAnchorPoint({ 0.f, 0.5f });
+            O.headStream->setColor({ 236, 186, 62 });
+            O.header->addChild(O.headStream, 0);
         }
 
         // the monitor is the trace + the pill, or just the pill when the trace is turned off
@@ -1198,17 +1254,21 @@ namespace streamui {
 
             // the wordmark sits just above the panel's top-left; the panel always leaves room for it
             bool showHead = S.header && chatVisible;
+            if (showHead) {
+                buildHeader();   // first time the title is switched on
+            }
             if (O.header) {
                 O.header->setVisible(showHead);
                 if (showHead) {
-                    float hsc = 0.34f * std::clamp(S.scale, 0.8f, 1.6f);
+                    // PUSAB is the font Geometry Dash itself uses; the size is its own setting
+                    float hsc = S.headScale;
                     O.headGd->setScale(hsc);
                     O.headStream->setScale(hsc);
-                    float hh = lineHeight(hsc, "bigFont.fnt");
-                    float wGd = textW("Gd", hsc, "bigFont.fnt");
+                    float hh = lineHeight(hsc, headerFont());
+                    float wGd = textW("Gd", hsc, headerFont());
                     O.headGd->setPosition({ 0.f, hh * 0.5f });
                     O.headStream->setPosition({ wGd, hh * 0.5f });
-                    O.header->setContentSize({ wGd + textW("Stream", hsc, "bigFont.fnt"), hh });
+                    O.header->setContentSize({ wGd + textW("Stream", hsc, headerFont()), hh });
                     O.header->setPosition({ r.getMinX() + 2.f, r.getMaxY() + 3.f });
                 }
             }
@@ -1281,10 +1341,43 @@ namespace streamui {
                 }
             }
             r.used = true;
+            r.view = v;
             r.node->setVisible(true);
         }
 
         // stacks the newest line at the bottom, oldest scroll away at the top
+        // Some label writes can land as an empty glyph run (a font bitmap used up, a string set while
+        // the node was hidden, a re-upload after the overlay was re-parented). This checks the rows
+        // that are on screen and repaints one that isn't showing its text. It runs once a second and
+        // only ever touches a row that is wrong, so it costs nothing when everything is fine.
+        void healRows(float dt) {
+            if (!O.built || !S.chat || O.rows.empty() || O.lines.empty()) {
+                return;
+            }
+            O.healTimer -= dt;
+            if (O.healTimer > 0.f) {
+                return;
+            }
+            O.healTimer = 1.f;
+            for (auto& r : O.rows) {
+                if (!r.used || !r.node || !r.node->isVisible()) {
+                    continue;
+                }
+                bool bodyBad = false;
+                for (int i = 0; i < 3; ++i) {
+                    bool shouldShow = i < static_cast<int>(r.view.wrapped.size());
+                    bool shows = r.body[i] && r.body[i]->isVisible() && !r.body[i]->getString().empty();
+                    if (shouldShow && !shows && !r.view.wrapped[static_cast<size_t>(i)].empty()) {
+                        bodyBad = true;
+                    }
+                }
+                bool userBad = r.user && r.user->getString().empty();
+                if (bodyBad || userBad) {
+                    paintRow(r, r.view, O.chat->getContentSize().width);
+                }
+            }
+        }
+
         void relayoutRows() {
             if (!O.built || !S.chat) {
                 return;
@@ -1463,7 +1556,13 @@ namespace streamui {
             if (!O.heart || !S.heart) {
                 return;
             }
+            // A finished run is a relief: the target walks down from the ceiling to a calm rate over
+            // about twenty seconds instead of sitting at 200+.
             int target = targetBpm(gPct);
+            if (gComplete) {
+                float t = std::clamp(O.completeT / 22.f, 0.f, 1.f);
+                target = static_cast<int>(targetBpm(0.f) + (target - targetBpm(0.f)) * (1.f - t * 0.92f));
+            }
 
             // irregular jumps of 3-7 bpm, with a wandering delay. Never 1 at a time, never a jump
             // from the resting rate to the ceiling.
@@ -1554,8 +1653,10 @@ namespace streamui {
                     CCPoint p{ u * span, baseY + y * amp };
                     if (i) {
                         // a faint glow under the line, then the line
-                        ecg->drawSegment(prev, p, 3.2f * S.scale, { 0.15f, 0.9f, 1.f, 0.10f });
-                        ecg->drawSegment(prev, p, 1.5f * S.scale, { 0.30f, 0.95f, 1.f, 0.55f });
+                        float glowW = 0.9f * S.scale * S.ecgWidth;
+                        float lineW = 0.55f * S.scale * S.ecgWidth;
+                        ecg->drawSegment(prev, p, lineW * 3.f, { 0.15f, 0.9f, 1.f, 0.10f });
+                        ecg->drawSegment(prev, p, lineW, { 0.30f, 0.95f, 1.f, 0.60f });
                     }
                     prev = p;
                 }
@@ -1575,7 +1676,7 @@ namespace streamui {
                 bump(0.24f, 0.035f, -0.34f);
                 bump(0.46f, 0.10f, 0.26f);
                 CCPoint head{ span, baseY + y * amp };
-                circleFill(O.ecgHead, head, 2.6f * S.scale, { 0.55f, 1.f, 1.f, 1.f }, 10);
+                circleFill(O.ecgHead, head, 1.5f * S.scale * S.ecgWidth, { 0.55f, 1.f, 1.f, 1.f }, 10);
             }
 
             // the beat phase advances with the current rate
@@ -2143,12 +2244,14 @@ namespace streamui {
             }
         }
 
+        healRows(dt);
         updateViewers(dt);
         updateHeart(dt);
         updateGifts(dt);
 
         // a completed level holds its celebration for a while
         if (gComplete) {
+            O.completeT += dt;
             gCompleteT += dt;
         }
     }
@@ -2200,6 +2303,7 @@ namespace streamui {
     }
 
     void onRestart() {
+        O.completeT = 0.f;
         ++gAttempts;
         gAttemptMax = 0.f;
         if (gComplete) {

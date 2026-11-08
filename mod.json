@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v3.3.3",
+	"version": "v3.3.4",
 	"id": "basu.input-buffer",
 	"name": "FrameWave",
 	"developer": "BASU",
@@ -589,6 +589,10 @@
 			"exo2": {
 				"path": "resources/fonts/Exo2.ttf",
 				"size": 64
+			},
+			"pusab": {
+				"path": "resources/fonts/Pusab.otf",
+				"size": 72
 			}
 		}
 	},

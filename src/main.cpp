@@ -10812,6 +10812,22 @@ private:
         rebuildPage();
     }
 
+    void onStreamHeadScale(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-head-scale", 0.42f) + (sender->getTag() > 0 ? 0.04f : -0.04f);
+        v = std::clamp(std::round(v * 25.f) / 25.f, 0.10f, 1.20f);
+        Mod::get()->setSavedValue("stream-head-scale", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
+    void onStreamEcgWidth(CCObject* sender) {
+        float v = Mod::get()->getSavedValue<float>("stream-ecg-width", 1.f) + (sender->getTag() > 0 ? 0.1f : -0.1f);
+        v = std::clamp(std::round(v * 10.f) / 10.f, 0.3f, 2.5f);
+        Mod::get()->setSavedValue("stream-ecg-width", v);
+        streamui::refresh();
+        rebuildPage();
+    }
+
     void onStreamEcg(CCObject*) {
         Mod::get()->setSavedValue("stream-ecg", !Mod::get()->getSavedValue<bool>("stream-ecg", true));
         streamui::refresh();
@@ -10875,8 +10891,9 @@ private:
     }
 
     void onStreamScale(CCObject* sender) {
-        float v = Mod::get()->getSavedValue<float>("stream-scale", 1.f) + (sender->getTag() > 0 ? 0.1f : -0.1f);
-        v = std::clamp(std::round(v * 10.f) / 10.f, 0.6f, 2.2f);
+        // 0.2x .. 3x in 0.05 steps, so the panel can be made as small or as large as wanted
+        float v = Mod::get()->getSavedValue<float>("stream-scale", 1.f) + (sender->getTag() > 0 ? 0.05f : -0.05f);
+        v = std::clamp(std::round(v * 20.f) / 20.f, 0.2f, 3.f);
         Mod::get()->setSavedValue("stream-scale", v);
         streamui::refresh();
         rebuildPage();
@@ -11160,7 +11177,15 @@ private:
         toggleRow("Heart Rate", "the BPM monitor", Mod::get()->getSavedValue<bool>("stream-heart", true), menu_selector(BufferMenu::onStreamHeart));
         toggleRow("Timestamps", "the clock before each name", Mod::get()->getSavedValue<bool>("stream-timestamps", true), menu_selector(BufferMenu::onStreamTimestamps));
         toggleRow("BPM Trace", "the cyan line beside the monitor", Mod::get()->getSavedValue<bool>("stream-ecg", true), menu_selector(BufferMenu::onStreamEcg));
-        toggleRow("GdStream Title", "the wordmark above the chat", Mod::get()->getSavedValue<bool>("stream-header", false), menu_selector(BufferMenu::onStreamHeader));
+        toggleRow("GdStream Title", "the wordmark above the chat (GD's own font)", Mod::get()->getSavedValue<bool>("stream-header", false), menu_selector(BufferMenu::onStreamHeader));
+        {
+            float hs = Mod::get()->getSavedValue<float>("stream-head-scale", 0.42f);
+            label(m_page, "Title Size", 0.36f, Mod::get()->getSavedValue<bool>("stream-header", false) ? m_text : m_muted,
+                { x + 20.f, y }, { 0.f, 0.5f });
+            label(m_page, fmt::format("{:.2f}", hs), 0.34f, m_cyan, { x + colW - 52.f, y }, { 1.f, 0.5f });
+            streamStepperButtons(x, colW, y, menu_selector(BufferMenu::onStreamHeadScale), 0);
+            y -= 16.f;
+        }
         toggleRow("Menu Button", "the small \"menu\" handle on the overlay", Mod::get()->getSavedValue<bool>("stream-chip", true), menu_selector(BufferMenu::onStreamChip));
 
         y -= 4.f;
@@ -11203,6 +11228,12 @@ private:
         label(m_page, fmt::format("{:.0f}%", Mod::get()->getSavedValue<float>("stream-opacity", 0.92f) * 100.f), 0.36f,
             m_cyan, { rx + colW - 52.f, ry }, { 1.f, 0.5f });
         streamStepperButtons(rx, colW, ry, menu_selector(BufferMenu::onStreamOpacity), 0);
+        ry -= 18.f;
+        label(m_page, "BPM Trace Width", 0.4f, Mod::get()->getSavedValue<bool>("stream-ecg", true) ? m_text : m_muted,
+            { rx + 10.f, ry }, { 0.f, 0.5f });
+        label(m_page, fmt::format("{:.1f}x", Mod::get()->getSavedValue<float>("stream-ecg-width", 1.f)), 0.36f, m_cyan,
+            { rx + colW - 52.f, ry }, { 1.f, 0.5f });
+        streamStepperButtons(rx, colW, ry, menu_selector(BufferMenu::onStreamEcgWidth), 0);
         ry -= 20.f;
         label(m_page, "Messages Per Second", 0.4f, m_text, { rx + 10.f, ry }, { 0.f, 0.5f });
         ry -= 16.f;
